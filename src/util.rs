@@ -50,7 +50,34 @@ pub mod time {
             if START < 0. {
                 START = t;
             }
+            #[cfg(feature = "local")]
+            {
+                return (t - START) * 1.5;
+            }
             t - START
         }
+    }
+}
+
+/// 同じ値が存在していれば挿入せずにNoneを返す
+/// 挿入できたらそのインデックスを返す
+#[inline]
+pub fn insert_sorted(v: &mut Vec<i64>, e: i64) -> Option<usize> {
+    match v.binary_search(&e) {
+        Ok(_) => None,
+        Err(pos) => {
+            v.insert(pos, e);
+            Some(pos)
+        }
+    }
+}
+
+/// 値が存在しなければNoneを返す
+/// 削除できたら削除した値を返す
+#[inline]
+pub fn remove_sorted(v: &mut Vec<i64>, e: i64) -> Option<i64> {
+    match v.binary_search(&e) {
+        Ok(pos) => Some(v.remove(pos)),
+        Err(_) => None,
     }
 }
