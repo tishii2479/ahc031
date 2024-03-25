@@ -221,7 +221,7 @@ fn create_bins(input: &Input) -> Vec<i64> {
             let d = rnd::gen_index(input.D);
             let col1 = rnd::gen_index(ws.len());
             let col2 = rnd::gen_index(ws.len());
-            if col1 == col2 {
+            if col1 == col2 || r[d][col1].len() <= 1 {
                 continue;
             }
             let cur_eval_d = eval_d(d, &ws, &r, input); // NOTE: eval_colにすればもっと早い
@@ -243,7 +243,7 @@ fn create_bins(input: &Input) -> Vec<i64> {
             let d = rnd::gen_index(input.D);
             let col1 = rnd::gen_index(ws.len());
             let col2 = rnd::gen_index(ws.len());
-            if col1 == col2 {
+            if col1 == col2 || r[d][col1].len() == 0 || r[d][col2].len() == 0 {
                 continue;
             }
             let cur_eval_d = eval_d(d, &ws, &r, input); // NOTE: eval_colにすればもっと早い
@@ -273,24 +273,28 @@ fn create_bins(input: &Input) -> Vec<i64> {
     eprintln!("iteration:   {}", iteration);
     eprintln!("score:       {}", eval(&ws, &r, input));
 
+    // ws.sort_by(|a, b| b.cmp(a));
+    eprintln!("ws:      {:?}", ws);
+
+    let mut bins = vec![0];
+    for &w in ws.iter() {
+        bins.push(bins.last().unwrap() + w);
+    }
+
+    let mut ans = Answer::new(input.D, input.N);
     for d in 0..input.D {
         for (col, rs) in r[d].iter().enumerate() {
             let mut height = 0;
             for &e in rs {
-                height += ceil_div(input.A[d][e], ws[col]);
+                let h = ceil_div(input.A[d][e], ws[col]);
+                ans.p[d][e] = (height, bins[col], height + h, bins[col + 1]);
+                height += h;
             }
             eprint!("{:4}", height);
         }
         eprintln!();
     }
-
-    ws.sort_by(|a, b| b.cmp(a));
-    eprintln!("ws:      {:?}", ws);
-
-    let mut bins = vec![0];
-    for w in ws {
-        bins.push(bins.last().unwrap() + w);
-    }
+    ans.output();
 
     bins
 }
@@ -307,5 +311,5 @@ fn main() {
     time::start_clock();
     let input = Input::read_input();
     let ans = solve(&input);
-    ans.output();
+    // ans.output();
 }
