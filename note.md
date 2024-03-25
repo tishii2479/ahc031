@@ -251,18 +251,20 @@ fn greedy(prev_r: &Vec<usize>, prev_h: &Vec<i64>, prev_rem: &Vec<i64>, next_r: &
     - 列内の高さがWを超えたら棄却
 - 初期解
     - 大きさの順番に対応させる
+- 改善
     - 2日目を作る時には、1日目の配置も自由に入れ替えて良い
+    - 余裕をたくさん使う場合は見送る、など
+    - DPで解く
+    - 反対方向からも最適化する
 
 ## ビンの幅
 
-- 永遠の課題
-- 全日程で実現できるビンをとりあえず求める？
 - 微妙に足りなくて損をすることはある？
     - 一行損をするくらいで、そんなに痛くないか？
 - そもそもどういう幅が良いのか？
     - なるべく均等が良いのか、偏りがあると良いのか？
     - なるべく細長い方が良さそう
-- ある程度最適化する必要あるなー
+- 近傍
     - 列のマージ
     - 列の分割
     - 幅の入れ替え
@@ -274,18 +276,6 @@ fn greedy(prev_r: &Vec<usize>, prev_h: &Vec<i64>, prev_rem: &Vec<i64>, next_r: &
     - だいぶ改善余地はある
     - 列に入っている個数・領域の一致具合
         - 個数、大きさの分布
-
-```rust
-let mut ws = vec![200; 5];
-
-// O(D)
-let mut r = vec![vec![vec![r_idx]; ws.len()]; input.D];
-for d in 0..input.D {
-    for i in 0..input.N {
-    }
-}
-```
-
 
 ```rust
 fn create_initial_state() {
@@ -301,3 +291,5 @@ let state = create_initial_state();
 for d in 1..input.D {
 }
 ```
+
+- arrよりarr[d]を渡した方が速いかも

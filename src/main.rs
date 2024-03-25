@@ -3,6 +3,7 @@ mod util;
 use crate::util::*;
 use proconio::input;
 
+const FIRST_TIME_LIMIT: f64 = 1.;
 const TIME_LIMIT: f64 = 2.9;
 
 #[allow(non_snake_case)]
@@ -44,9 +45,11 @@ impl Answer {
     }
 }
 
-fn create_bins(input: &Input) -> Vec<i64> {
+fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
     let mut ws = vec![200; 5];
     let mut r = vec![vec![vec![]; ws.len()]; input.D];
+
+    // 初期状態の作成
     for d in 0..input.D {
         let mut height = vec![0; ws.len()];
         for i in (0..input.N).rev() {
@@ -87,8 +90,8 @@ fn create_bins(input: &Input) -> Vec<i64> {
         let mut score = 0;
         for (col, rs) in r[d].iter().enumerate() {
             let mut height = 0;
-            for &e in rs {
-                height += ceil_div(input.A[d][e], ws[col]);
+            for &i in rs {
+                height += ceil_div(input.A[d][i], ws[col]);
             }
             if height > input.W {
                 score += (height - input.W) * ws[col] * 100;
@@ -112,7 +115,7 @@ fn create_bins(input: &Input) -> Vec<i64> {
     let mut iteration = 0;
     eprintln!("cur_score    = {}", cur_score);
 
-    while time::elapsed_seconds() < TIME_LIMIT {
+    while time::elapsed_seconds() < FIRST_TIME_LIMIT {
         let p = rnd::nextf();
         if p < 0.2 {
             // 列iを列jにマージする
@@ -239,7 +242,7 @@ fn create_bins(input: &Input) -> Vec<i64> {
                 r[d][col1].push(r1);
             }
         } else {
-            // 領域を移動する
+            // 領域をスワップする
             let d = rnd::gen_index(input.D);
             let col1 = rnd::gen_index(ws.len());
             let col2 = rnd::gen_index(ws.len());
@@ -272,37 +275,198 @@ fn create_bins(input: &Input) -> Vec<i64> {
 
     eprintln!("iteration:   {}", iteration);
     eprintln!("score:       {}", eval(&ws, &r, input));
+    eprintln!("ws:          {:?}", ws);
 
-    // ws.sort_by(|a, b| b.cmp(a));
-    eprintln!("ws:      {:?}", ws);
+    (ws, r)
+}
 
-    let mut bins = vec![0];
-    for &w in ws.iter() {
-        bins.push(bins.last().unwrap() + w);
+fn greedy(
+    prev_r: &Vec<usize>,
+    prev_h: &Vec<i64>,
+    prev_rem: &Vec<i64>,
+    prev_g: &Vec<usize>,
+    next_r: &Vec<usize>,
+    h: i64,
+    a: &Vec<Vec<i64>>,
+    d: usize,
+    w: i64,
+) -> (Vec<i64>, Vec<i64>, Vec<usize>, usize) {
+    let mut next_h = Vec::with_capacity(next_r.len());
+    let mut next_rem = Vec::with_capacity(next_r.len());
+    let mut next_g = Vec::with_capacity(next_r.len());
+
+    // 切り替え回数
+    // 重複した仕切りを使うと、切り替え回数を減らせる
+    let mut switch_count = prev_r.len() + next_r.len() - 2;
+
+    let mut prev_i = 0;
+    let mut next_i = 0;
+    let mut cur_prev_h = 0;
+    let mut cur_next_h = 0;
+
+    let mut cur_prev_g = prev_g[prev_i];
+    let mut cur_next_g = 0;
+    let mut cur_prev_rem = prev_rem[cur_prev_g];
+    let mut cur_next_rem = h - next_r.iter().map(|&i| ceil_div(a[d][i], w)).sum::<i64>();
+
+    while prev_i < prev_r.len() || next_i < next_r.len() {
+        if cur_prev_h <= cur_next_h {
+            if prev_i < prev_r.len() {
+                cur_prev_h += prev_h[prev_i];
+                prev_i += 1;
+            }
+            if prev_i < prev_g.len() && cur_prev_g != prev_g[prev_i] {
+                // グループが変わった
+                cur_prev_h += cur_prev_rem;
+                cur_prev_g = prev_g[prev_i];
+                cur_prev_rem = prev_rem[cur_prev_g];
+            }
+        } else {
+            if next_i < next_r.len() {
+                let h = ceil_div(a[d][next_r[next_i]], w);
+                next_h.push(h);
+                cur_next_h += h;
+                next_i += 1;
+            }
+        }
+
+        if cur_prev_h <= cur_next_h
+            && cur_prev_h + cur_prev_rem >= cur_next_h
+            && !(prev_i + 1 < prev_h.len() && cur_prev_h + prev_h[prev_i + 1] <= cur_next_h)
+        {
+            // 次の領域を消費してもnextに届かない場合はスルーする
+            // cur_prev_remを消費してnextに合わせる場合
+            let use_prev_rem = cur_next_h - cur_prev_h;
+            while next_g.len() < next_i {
+                next_g.push(cur_next_g);
+            }
+            next_rem.push(0);
+            cur_next_g += 1;
+            cur_prev_h += use_prev_rem;
+            cur_prev_rem -= use_prev_rem;
+            switch_count -= 2;
+        } else if cur_next_h <= cur_prev_h
+            && cur_next_h + cur_next_rem >= cur_prev_h
+            && !(next_i + 1 < next_h.len() && cur_next_h + next_h[next_i + 1] <= cur_prev_h)
+            && next_g.len() < next_i
+        {
+            // 次の領域を消費してもprevに届かない場合はスルーする
+            // cur_next_remを消費してprevに合わせる場合
+            let use_next_rem = cur_prev_h - cur_next_h;
+            *next_h.last_mut().unwrap() += use_next_rem;
+            while next_g.len() < next_i {
+                next_g.push(cur_next_g);
+            }
+            next_rem.push(cur_next_rem);
+            cur_next_g += 1;
+            cur_next_h += use_next_rem;
+            cur_next_rem -= use_next_rem;
+            switch_count -= 2;
+        }
     }
+    if next_g.len() < next_i {
+        // 最後のグループがまとまっていなければ残りを追加する
+        next_rem.push(cur_next_rem);
+    } else {
+        // 最後のグループがまとまっていれば残りの余裕を加算する
+        *next_rem.last_mut().unwrap() += cur_next_rem;
+    }
+    while next_g.len() < next_i {
+        next_g.push(cur_next_g);
+    }
+
+    (next_h, next_rem, next_g, switch_count)
+}
+
+fn optimize_r(ws: Vec<i64>, mut r: Vec<Vec<Vec<usize>>>, input: &Input) {
+    // 重さ順にソートしておく
+    for d in 0..input.D {
+        for rs in r[d].iter_mut() {
+            rs.sort();
+        }
+    }
+
+    let mut h = vec![vec![vec![]; ws.len()]; input.D];
+    let mut rem = vec![vec![vec![]; ws.len()]; input.D];
+    let mut g = vec![vec![vec![]; ws.len()]; input.D];
+    for col in 0..ws.len() {
+        h[0][col] = r[0][col]
+            .iter()
+            .map(|&i| ceil_div(input.A[0][i], ws[col]))
+            .collect();
+        let col_rem = input.W - h[0][col].iter().sum::<i64>();
+        rem[0][col].push(col_rem);
+        g[0][col] = vec![0; r[0][col].len()];
+    }
+
+    fn eval(
+        d: usize,
+        h: &Vec<Vec<Vec<i64>>>,
+        rem: &Vec<Vec<Vec<i64>>>,
+        r: &Vec<Vec<Vec<usize>>>,
+        g: &Vec<Vec<Vec<usize>>>,
+        ws: &Vec<i64>,
+        input: &Input,
+    ) -> i64 {
+        let mut score = 0;
+        for col in 0..ws.len() {
+            let w = ws[col];
+            let (next_h, next_rem, next_g, switch_count) = greedy(
+                &r[d - 1][col],
+                &h[d - 1][col],
+                &rem[d - 1][col],
+                &g[d - 1][col],
+                &r[d][col],
+                input.W,
+                &input.A,
+                d,
+                w,
+            );
+            score += ws[col] * switch_count as i64;
+        }
+        score
+    }
+
+    let cur_score = eval(0, &h, &rem, &r, &g, &ws, input);
+
+    for d in 1..input.D {
+        for _ in 0..10000 {
+            let p = rnd::nextf();
+            if p < 0.2 {
+                // 列内の入れ替え
+                let col = rnd::gen_index(ws.len());
+                let (i, j) = (
+                    rnd::gen_index(r[d][col].len()),
+                    rnd::gen_index(r[d][col].len()),
+                );
+                if i == j {
+                    continue;
+                }
+                r[d][col].swap(i, j);
+            }
+        }
+    }
+}
+
+fn solve(input: &Input) -> Answer {
+    let (ws, r) = create_col_and_initial_r(input);
+    // let ans = optimize_r(ws, r, input);
 
     let mut ans = Answer::new(input.D, input.N);
     for d in 0..input.D {
+        let mut width = 0;
         for (col, rs) in r[d].iter().enumerate() {
             let mut height = 0;
             for &e in rs {
                 let h = ceil_div(input.A[d][e], ws[col]);
-                ans.p[d][e] = (height, bins[col], height + h, bins[col + 1]);
+                ans.p[d][e] = (height, width, height + h, width + ws[col]);
                 height += h;
             }
+            width += ws[col];
             eprint!("{:4}", height);
         }
         eprintln!();
     }
-    ans.output();
-
-    bins
-}
-
-fn solve(input: &Input) -> Answer {
-    let ans = Answer::new(input.D, input.N);
-    let bins = create_bins(input);
-    eprintln!("{:?}", bins);
 
     ans
 }
@@ -310,6 +474,19 @@ fn solve(input: &Input) -> Answer {
 fn main() {
     time::start_clock();
     let input = Input::read_input();
-    let ans = solve(&input);
+    // let ans = solve(&input);
     // ans.output();
+
+    let d = 1;
+    let w = 100;
+    let prev_r = vec![1, 2, 3, 4];
+    let prev_h = vec![11666, 16167, 16717, 46095];
+    let prev_h: Vec<i64> = prev_h.iter().map(|&s| ceil_div(s, w)).collect();
+    let prev_rem = vec![input.W - prev_h.iter().sum::<i64>()];
+    let prev_g = vec![0, 0, 0, 0];
+    let next_r = vec![0, 1, 2, 3];
+    let (next_h, next_rem, next_g, switch_count) = greedy(
+        &prev_r, &prev_h, &prev_rem, &prev_g, &next_r, input.W, &input.A, d, w,
+    );
+    dbg!(next_h, next_rem, next_g, switch_count);
 }
