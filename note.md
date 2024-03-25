@@ -171,3 +171,133 @@ struct Node {
 
 - 繰り返しビームサーチするとか？
     - 多分筋が良くない
+
+- 仕切りを焼くのは解空間が広すぎる
+- 予約の位置を焼く？
+    - 順番を固定する？
+    - 各列に入る予約だけを固定する？
+        - 順番は最適な順番を求める
+
+```rust
+state: Vec<Vec<Vec<(usize, i64, i64)>>>
+
+fn greedy(prev_r: &Vec<usize>, prev_h: &Vec<i64>, prev_rem: &Vec<i64>, next_r: &Vec<usize>, input: &Input, d: usize) {
+    let mut next_h = vec![];
+    let mut next_rem = vec![];
+
+    let mut cur_prev_rem = prev_rem[0];
+    let mut cur_next_rem = input.W - next_r.iter().map(|i| (input.A[d][i] + w - 1) / w).sum();
+    let mut j = 0;
+    let mut cur_prev_height = 0;
+    let mut cur_next_height = 0;
+    for i in 0..next_r.len() {
+        cur_next_height += input.A[d][next_r[i]];
+        while j < prev_r.len() && cur_prev_height + prev_h[j] < cur_next_height {
+            cur_prev_height += prev_h[j];
+            j += 1;
+        }
+
+        let use_prev_rem = cur_next_height - cur_prev_height;
+        let use_next_rem = cur_prev_height + prev[j].1 - cur_next_height;
+
+        let height = if cur_prev_rem >= use_prev_rem && cur_prev_rem - use_prev_rem >= cur_next_rem - use_next_rem {
+            // 1. cur_prev_height < cur_next_height、prev_remを使う場合
+            cur_prev_rem -= use_prev_rem;
+            input.A[d][i]
+        } else if cur_next_rem >= use_next_rem && cur_prev_rem - use_prev_rem <= cur_next_rem - use_next_rem {
+            // 2. cur_prev_height + prev[j].1 > cur_next_height、next_remを使う場合
+            cur_next_rem -= use_next_rem;
+            c + use_next_rem
+        } else {
+            // 3. どちらも使えない場合
+            use_next_rem
+        };
+        next_h.push(height);
+        cur_prev_rem = prev_rem[j].min(cur_prev_rem);
+    }
+}
+```
+
+- 一個前が固定されている場合、使った余裕の最小値を持てばDPできる
+
+# 3/25
+
+- シミュレーションを繰り返す焼きなましよりはビームサーチが強いのでは、、？
+- 以降の作りやすさを考慮できていないのでは？
+    - 後から局所改善する
+        - 一日を選んで、局所改善
+    - 全体を最適化する
+        - 後の解が良い保証がない限り無駄な気がする
+    - 状態を複数保持して多様性を担保する
+        - あり
+
+## 解法
+
+- 基本方針
+    - 毎日焼きなましをして前日との切り替え回数が少ない配置を探す
+- 状態
+    - 日毎の予約の割り当て
+        - 列ごとの予約の順番、確保している高さ、余裕を保持する
+        - r, height, rem
+    - 余裕
+        - rem[i] := i番目の予約を使用するまでに使えるブロックの数
+- 近傍
+    - 列内の入れ替え
+    - 列間の入れ替え
+- 評価関数
+    - 生スコア
+    - タイブレークには全体の余裕
+- 枝刈り
+    - 列内の高さがWを超えたら棄却
+- 初期解
+    - 大きさの順番に対応させる
+    - 2日目を作る時には、1日目の配置も自由に入れ替えて良い
+
+## ビンの幅
+
+- 永遠の課題
+- 全日程で実現できるビンをとりあえず求める？
+- 微妙に足りなくて損をすることはある？
+    - 一行損をするくらいで、そんなに痛くないか？
+- そもそもどういう幅が良いのか？
+    - なるべく均等が良いのか、偏りがあると良いのか？
+    - なるべく細長い方が良さそう
+- ある程度最適化する必要あるなー
+    - 列のマージ
+    - 列の分割
+    - 幅の入れ替え
+    - 領域の移動
+        - スワップ
+        - 移動
+- 目的関数
+    - `はみ出した面積 * 100 - 列ごとの余裕`
+    - だいぶ改善余地はある
+    - 列に入っている個数・領域の一致具合
+        - 個数、大きさの分布
+
+```rust
+let mut ws = vec![200; 5];
+
+// O(D)
+let mut r = vec![vec![vec![r_idx]; ws.len()]; input.D];
+for d in 0..input.D {
+    for i in 0..input.N {
+    }
+}
+```
+
+
+```rust
+fn create_initial_state() {
+}
+
+let bins = create_bins();
+
+let mut r: Vec<Vec<Vec<(usize, i64)>>>
+let mut rem: Vec<Vec<Vec<usize>>>
+
+let state = create_initial_state();
+
+for d in 1..input.D {
+}
+```

@@ -19,6 +19,12 @@ pub mod rnd {
 
     #[inline]
     #[allow(unused)]
+    pub fn gen_rangef(low: f64, high: f64) -> f64 {
+        nextf() * (high - low) + low
+    }
+
+    #[inline]
+    #[allow(unused)]
     pub fn gen_range(low: usize, high: usize) -> usize {
         assert!(low < high);
         (next() % (high - low)) + low
@@ -80,4 +86,9 @@ pub fn remove_sorted(v: &mut Vec<i64>, e: i64) -> Option<i64> {
         Ok(pos) => Some(v.remove(pos)),
         Err(_) => None,
     }
+}
+
+#[inline]
+pub fn ceil_div(a: i64, b: i64) -> i64 {
+    (a + b - 1) / b
 }
