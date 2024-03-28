@@ -1,49 +1,11 @@
+mod def;
+mod solver;
 mod util;
 
+use crate::def::*;
 use crate::util::*;
-use proconio::input;
 
 const FIRST_TIME_LIMIT: f64 = 1.;
-const TIME_LIMIT: f64 = 2.9;
-
-#[allow(non_snake_case)]
-struct Input {
-    W: i64,
-    D: usize,
-    N: usize,
-    A: Vec<Vec<i64>>,
-}
-
-impl Input {
-    #[allow(non_snake_case)]
-    fn read_input() -> Input {
-        input! {
-            W: i64, D: usize, N: usize,
-            A: [[i64; N]; D]
-        }
-        Input { W, D, N, A }
-    }
-}
-
-struct Answer {
-    p: Vec<Vec<(i64, i64, i64, i64)>>,
-}
-
-impl Answer {
-    fn new(d: usize, n: usize) -> Answer {
-        Answer {
-            p: vec![vec![(0, 0, 0, 0); n]; d],
-        }
-    }
-
-    fn output(&self) {
-        for vec in self.p.iter() {
-            for p in vec.iter() {
-                println!("{} {} {} {}", p.0, p.1, p.2, p.3);
-            }
-        }
-    }
-}
 
 fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
     let mut ws = vec![200; 5];
@@ -376,6 +338,114 @@ fn greedy(
     }
 
     (next_h, next_rem, next_g, switch_count)
+}
+
+struct Node {
+    is_joint: bool,
+    val: i64,             // joint => rem, leaf => height
+    child: Option<usize>, // joint => first-child, leaf => next-child
+}
+
+struct ColMatcher {
+    node_pool: Vec<Node>,
+    unused: Vec<usize>,
+    cur_prev_height: i64,
+    cur_next_height: i64,
+    cur_next_rem: i64,
+    cur_rem: Vec<i64>,
+    cur_children: Vec<usize>,
+    next_i: usize,
+}
+
+impl ColMatcher {
+    fn new() -> ColMatcher {
+        ColMatcher {
+            node_pool: vec![],
+            unused: vec![],
+            cur_prev_height: 0,
+            cur_next_height: 0,
+            cur_next_rem: 0,
+            cur_rem: vec![],
+            cur_children: vec![],
+            next_i: 0,
+        }
+    }
+
+    fn f(&mut self, prev_root_node_idx: usize, next_h: &Vec<i64>, input: &Input) -> usize {
+        self.cur_prev_height = 0;
+        self.cur_next_height = 0;
+        self.cur_next_rem = input.W - next_h.iter().sum::<i64>();
+        self.cur_rem.clear();
+        self.cur_children.clear();
+        self.next_i = 0;
+        self.dfs(prev_root_node_idx, next_h);
+        prev_root_node_idx
+    }
+
+    fn dfs(&mut self, node_idx: usize, next_h: &Vec<i64>) {
+        let node = &self.node_pool[node_idx];
+        if node.is_joint {
+            self.cur_rem.push(node.val);
+            self.dfs(node.child.unwrap(), next_h);
+            self.cur_prev_height += self.cur_rem.pop().unwrap();
+            self.merge_if_possible(next_h);
+        } else {
+            self.cur_prev_height += node.val;
+            if let Some(next_child) = node.child {
+                self.merge_if_possible(next_h);
+                self.dfs(next_child, next_h);
+            } else {
+                return;
+            }
+        }
+    }
+
+    fn new_node(&mut self, is_joint: bool, val: i64, child: Option<usize>) -> usize {
+        if let Some(i) = self.unused.pop() {
+            let node = &mut self.node_pool[i];
+            node.is_joint = is_joint;
+            node.val = val;
+            node.child = child;
+            return i;
+        }
+        self.node_pool.push(Node {
+            is_joint,
+            val,
+            child,
+        });
+        self.node_pool.len() - 1
+    }
+
+    fn merge_if_possible(&mut self, next_h: &Vec<i64>) {
+        let rem = self.cur_rem.iter().sum::<i64>();
+        while self.next_i < next_h.len()
+            && self.cur_next_height + next_h[self.next_i] < self.cur_prev_height
+        {
+            let new_node_idx = self.new_node(false, next_h[self.next_i], None);
+            self.cur_children.push(new_node_idx);
+            self.cur_next_height += next_h[self.next_i];
+            self.next_i += 1;
+        }
+
+        if self.cur_prev_height <= self.cur_next_height
+            && self.cur_prev_height + rem >= self.cur_next_height
+        {
+            // prevをnextに合わせる
+            let mut use_rem = self.cur_next_height - self.cur_prev_height;
+            let mut i = self.cur_rem.len() - 1;
+            while use_rem > 0 {
+                let c = use_rem.min(self.cur_rem[i]);
+                self.cur_rem[i] -= c;
+                use_rem -= c;
+                i -= 1;
+            }
+            self.cur_prev_height = self.cur_next_height;
+        } else if self.cur_next_height <= self.cur_prev_height
+            && self.cur_next_height + self.cur_next_rem >= self.cur_prev_height
+        {
+            // nextをprevに合わせる
+        }
+    }
 }
 
 fn optimize_r(ws: Vec<i64>, mut r: Vec<Vec<Vec<usize>>>, input: &Input) {

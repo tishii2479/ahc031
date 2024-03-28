@@ -1,0 +1,42 @@
+use proconio::input;
+
+pub const TIME_LIMIT: f64 = 2.9;
+
+#[allow(non_snake_case)]
+pub struct Input {
+    pub W: i64,
+    pub D: usize,
+    pub N: usize,
+    pub A: Vec<Vec<i64>>,
+}
+
+impl Input {
+    #[allow(non_snake_case)]
+    pub fn read_input() -> Input {
+        input! {
+            W: i64, D: usize, N: usize,
+            A: [[i64; N]; D]
+        }
+        Input { W, D, N, A }
+    }
+}
+
+pub struct Answer {
+    pub p: Vec<Vec<(i64, i64, i64, i64)>>,
+}
+
+impl Answer {
+    pub fn new(d: usize, n: usize) -> Answer {
+        Answer {
+            p: vec![vec![(0, 0, 0, 0); n]; d],
+        }
+    }
+
+    pub fn output(&self) {
+        for vec in self.p.iter() {
+            for p in vec.iter() {
+                println!("{} {} {} {}", p.0, p.1, p.2, p.3);
+            }
+        }
+    }
+}

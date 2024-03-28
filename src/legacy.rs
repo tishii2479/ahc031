@@ -366,3 +366,85 @@ fn create_bins(input: &Input) -> Vec<i64> {
     }
     bins
 }
+
+struct NodePool {
+    stack: RefCell<Vec<Node>>,
+}
+
+impl NodePool {
+    fn new(size: usize) -> NodePool {
+        let stack = vec![Node::new(); size];
+        NodePool {
+            stack: RefCell::new(stack),
+        }
+    }
+
+    fn get(&mut self) -> NodeHandle {
+        if let Some(mut node) = self.stack.borrow_mut().pop() {
+            node.init();
+            return NodeHandle {
+                stack: &self.stack,
+                node: Some(node),
+            };
+        }
+        let node = Node::new();
+        NodeHandle {
+            stack: &self.stack,
+            node: Some(node),
+        }
+    }
+}
+
+struct NodeHandle<'a> {
+    stack: &'a RefCell<Vec<Node>>,
+    node: Option<Node>,
+}
+
+impl<'a> NodeHandle<'a> {
+    fn drop(&mut self) {
+        let node = self.node.take().unwrap();
+        self.stack.borrow_mut().push(node);
+    }
+}
+
+// impl<'a> ops::Deref for NodeHandle<'a> {
+//     type Target = Node;
+//     fn deref(&self) -> &Node {
+//         self.node.as_ref().unwrap()
+//     }
+// }
+
+// impl<'a> ops::DerefMut for NodeHandle<'a> {
+//     fn deref_mut(&mut self) -> &mut Node {
+//         self.node.as_mut().unwrap()
+//     }
+// }
+
+#[derive(Clone)]
+struct Node {
+    par: Option<usize>,
+    children: Vec<Node>,
+    height: i64,
+    _rem: i64,
+    cur_rem: i64,
+}
+
+impl Node {
+    fn new() -> Node {
+        Node {
+            par: None,
+            children: vec![],
+            height: 0,
+            _rem: 0,
+            cur_rem: 0,
+        }
+    }
+
+    fn init(&mut self) {
+        self.par = None;
+        self.children.clear();
+        self.height = 0;
+        self._rem = 0;
+        self.cur_rem = 0;
+    }
+}
