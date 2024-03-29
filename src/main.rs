@@ -158,7 +158,7 @@ fn main() {
 
     let mut start_cands = vec![];
     for _ in 0..100 {
-        let col = rnd::gen_range(1, 6);
+        let col = rnd::gen_range(1, 10);
         let mut bins = (0..col - 1)
             .map(|_| rnd::gen_range(1, input.W as usize) as i64)
             .collect::<Vec<i64>>();

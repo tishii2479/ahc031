@@ -381,7 +381,7 @@ impl State {
 
         // TODO: タイブレーク時には、余裕の残り具合も足す
         // TODO: 幅も考慮する
-        // let prev_rem = prev_rem.iter().map(|v| v.iter().sum::<i64>()).sum::<i64>();
+        // let prev_rem = prev_pickup_rem.iter().sum::<i64>();
         // let next_rem = groups.iter().map(|g| g.2).sum::<i64>();
         // let rem = prev_rem + next_rem;
 
