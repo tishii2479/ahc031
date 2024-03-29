@@ -40,6 +40,7 @@ fn match_greedy(
             }
 
             // 回収する
+            // ISSUE: new_prev_rem[:, prev_h.len() - 1]しか残ってないのでは？
             if prev_r < prev_h.len() - 1 {
                 for i in 0..=prev_r {
                     prev_height += new_prev_rem[i][prev_r];
@@ -67,16 +68,13 @@ fn match_greedy(
         }
 
         if prev_height <= next_height && next_height <= prev_height + prev_rem_sum {
-            // NOTE: 最終的な更新でだけする必要がある
             let mut use_prev_rem = next_height - prev_height;
             prev_rem_sum -= use_prev_rem;
-            for i in 0..prev_h.len() {
-                for j in i..prev_h.len() {
-                    if i <= prev_r - 1 && prev_r - 1 <= j {
-                        let r = new_prev_rem[i][j].min(use_prev_rem);
-                        new_prev_rem[i][j] -= r;
-                        use_prev_rem -= r;
-                    }
+            for i in 0..prev_r {
+                for j in prev_r - 1..prev_h.len() {
+                    let r = new_prev_rem[i][j].min(use_prev_rem);
+                    new_prev_rem[i][j] -= r;
+                    use_prev_rem -= r;
                 }
             }
             assert_eq!(use_prev_rem, 0, "{:?} {:?}", prev_rem, new_prev_rem);
@@ -349,9 +347,6 @@ impl<'a> Solver<'a> {
     }
 
     pub fn solve(&mut self) -> Answer {
-        let start = time::elapsed_seconds();
-        let mut a = 0.;
-
         let mut total_cost = 0;
 
         for d in 0..self.input.D {
@@ -368,16 +363,14 @@ impl<'a> Solver<'a> {
                 .map(|col| self.state.trees[col].gen_rem(&self.state.node_idx[d][col]))
                 .collect();
 
-            a -= time::elapsed_seconds();
             self.optimize_r(&prev_h, &prev_rem, d);
-            a += time::elapsed_seconds();
 
             // 事後計算
             for col in 0..self.state.ws.len() {
                 let next_h = self.state.r[d][col]
                     .iter()
                     .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
-                    .collect();
+                    .collect::<Vec<i64>>();
                 let (match_count, groups, _) =
                     match_greedy(&prev_h[col], &prev_rem[col], &next_h, self.input.W);
                 let switch_count = if d == 0 {
@@ -397,8 +390,6 @@ impl<'a> Solver<'a> {
                 self.state.node_idx[d + 1].push(next_nodes);
             }
         }
-        let total = time::elapsed_seconds() - start;
-        eprintln!("a: {:.5} ({:.5})", a, a / total);
 
         let mut ans = Answer::new(self.input.D, self.input.N, total_cost);
         let mut width = 0;
@@ -421,19 +412,26 @@ impl<'a> Solver<'a> {
         ans
     }
 
-    /// TODO:
-    /// - d=0だけ特別に処理する（d=1）からにする
-    /// - d=0は余裕だけを評価する
+    /// TODO: d=0は余裕だけを評価する
     fn optimize_r(&mut self, prev_h: &Vec<Vec<i64>>, prev_rem: &Vec<Vec<Vec<i64>>>, d: usize) {
-        let mut current_score_col: Vec<i64> = (0..self.state.ws.len())
+        let mut cur_score_col: Vec<i64> = (0..self.state.ws.len())
             .map(|col| {
                 self.state
                     .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input)
             })
             .collect();
-        let mut current_score = current_score_col.iter().sum::<i64>();
+        let mut cur_score = cur_score_col.iter().sum::<i64>();
 
-        for _ in 0..10000 {
+        let iteration = 50000;
+        let start_temp: f64 = 100.;
+        let end_temp: f64 = 0.1;
+
+        eprintln!("start_cur_score: {}", cur_score);
+
+        for t in 0..iteration {
+            let progress = t as f64 / iteration as f64;
+            let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
+            let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
             if p < 0.5 {
                 // 列内1:1swap
@@ -450,11 +448,11 @@ impl<'a> Solver<'a> {
                 let new_score_col =
                     self.state
                         .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input);
-                let score_diff = new_score_col - current_score_col[col];
-                if score_diff < 0 {
-                    eprintln!("{} -> {}", current_score, current_score + score_diff);
-                    current_score_col[col] = new_score_col;
-                    current_score += score_diff;
+                let score_diff = new_score_col - cur_score_col[col];
+                if (score_diff as f64) <= threshold {
+                    // eprintln!("swap-in-col: {} -> {}", cur_score, cur_score + score_diff);
+                    cur_score_col[col] = new_score_col;
+                    cur_score += score_diff;
                 } else {
                     self.state.r[d][col].swap(i, j);
                 }
@@ -480,21 +478,22 @@ impl<'a> Solver<'a> {
                 let new_score_col2 =
                     self.state
                         .eval_col(d, col2, &prev_h[col2], &prev_rem[col2], self.input);
-                let score_diff = new_score_col1 + new_score_col2
-                    - current_score_col[col1]
-                    - current_score_col[col2];
+                let score_diff =
+                    new_score_col1 + new_score_col2 - cur_score_col[col1] - cur_score_col[col2];
 
-                if score_diff < 0 {
-                    eprintln!("{} -> {}", current_score, current_score + score_diff);
-                    current_score_col[col1] = new_score_col1;
-                    current_score_col[col2] = new_score_col2;
-                    current_score += score_diff;
+                if (score_diff as f64) <= threshold {
+                    // eprintln!("swap-am-col: {} -> {}", cur_score, cur_score + score_diff);
+                    cur_score_col[col1] = new_score_col1;
+                    cur_score_col[col2] = new_score_col2;
+                    cur_score += score_diff;
                 } else {
                     (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
                         (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
                 }
             }
         }
+
+        eprintln!("end_cur_score: {}", cur_score);
     }
 }
 
@@ -536,11 +535,17 @@ impl State {
             .collect::<Vec<i64>>();
 
         if next_h.iter().sum::<i64>() > input.W {
-            return 1 << 30;
+            return 1 << 50;
         }
 
         let (match_count, _, _) = match_greedy(&prev_h, &prev_rem, &next_h, input.W);
         let switch_count = prev_h.len() + next_h.len() - match_count * 2;
+
+        // TODO: タイブレーク時には、余裕の残り具合も足す
+        // TODO: 幅も考慮する
+        // let prev_rem = prev_rem.iter().map(|v| v.iter().sum::<i64>()).sum::<i64>();
+        // let next_rem = groups.iter().map(|g| g.2).sum::<i64>();
+        // let rem = prev_rem + next_rem;
 
         switch_count as i64 * self.ws[col]
     }

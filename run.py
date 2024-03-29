@@ -192,7 +192,7 @@ class Runner:
         df = df[
             (
                 ~df.solver_version.str.startswith("optuna-")
-                & ~df.solver_version.str.startswith("solver-")
+                # & ~df.solver_version.str.startswith("solver-")
             )
             | (df.solver_version == self.solver_version)
         ]
@@ -220,12 +220,13 @@ class Result(IResult):
         result_str = stderr[json_start:]
         try:
             result_json = json.loads(result_str)
+            self.score = result_json["score"]
+            self.duration = result_json["duration"]
         except json.JSONDecodeError as e:
             print(e)
             print(f"failed to parse result_str: {result_str}, input_file: {input_file}")
-            exit(1)
-        self.score = result_json["score"]
-        self.duration = result_json["duration"]
+            self.score = int(1e9)
+            self.duration = 0.0
 
 
 def parse_config() -> argparse.Namespace:
@@ -271,7 +272,7 @@ if __name__ == "__main__":
         log_file=args.log_file,
         is_maximize=False,
     )
-    columns = ["m", "eps"]
+    columns = ["a.sum.mean", "d"]
 
     if args.list_solver:
         runner.list_solvers()

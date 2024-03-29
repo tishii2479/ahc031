@@ -78,7 +78,8 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
     let mut iteration = 0;
     eprintln!("cur_score    = {}", cur_score);
 
-    while time::elapsed_seconds() < FIRST_TIME_LIMIT {
+    // while time::elapsed_seconds() < FIRST_TIME_LIMIT {
+    for _ in 0..100000 {
         let p = rnd::nextf();
         if p < 0.2 {
             // 列iを列jにマージする
