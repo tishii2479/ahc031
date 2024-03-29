@@ -57,7 +57,7 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
                 height += ceil_div(input.A[d][i], ws[col]);
             }
             if height > input.W {
-                score += (height - input.W) * ws[col] * 100;
+                score += (height - input.W) * ws[col] * 100000;
             } else if rs.len() > 0 {
                 // 含まれていない列はスコアに加算しない
                 score -= (input.W - height) * ws[col];
@@ -257,5 +257,4 @@ fn main() {
     let input = Input::read_input();
     let ans = solve(&input);
     ans.output();
-    eprintln!("elapsed:   {:.4}", time::elapsed_seconds());
 }

@@ -211,7 +211,6 @@ class Result(IResult):
     solver_version: str
     score: int
     duration: float
-    query_count: int
 
     def __init__(self, stderr: str, input_file: str, solver_version: str):
         self.input_file = input_file
@@ -227,7 +226,6 @@ class Result(IResult):
             exit(1)
         self.score = result_json["score"]
         self.duration = result_json["duration"]
-        self.query_count = result_json["query_count"]
 
 
 def parse_config() -> argparse.Namespace:
@@ -244,7 +242,7 @@ def parse_config() -> argparse.Namespace:
         "-s",
         "--solver-path",
         type=str,
-        default="./tools/target/release/tester ./target/release/ahc031",
+        default="./target/release/ahc031",
     )
     parser.add_argument(
         "-a",

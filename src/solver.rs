@@ -394,7 +394,7 @@ impl<'a> Solver<'a> {
             }
         }
 
-        let mut ans = Answer::new(self.input.D, self.input.N);
+        let mut ans = Answer::new(self.input.D, self.input.N, self.state.score);
 
         let mut width = 0;
         for col in 0..self.state.ws.len() {

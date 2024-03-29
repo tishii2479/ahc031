@@ -1,3 +1,4 @@
+use crate::util::*;
 use proconio::input;
 
 pub const TIME_LIMIT: f64 = 2.9;
@@ -23,12 +24,14 @@ impl Input {
 
 pub struct Answer {
     pub p: Vec<Vec<(i64, i64, i64, i64)>>,
+    pub score: i64,
 }
 
 impl Answer {
-    pub fn new(d: usize, n: usize) -> Answer {
+    pub fn new(d: usize, n: usize, score: i64) -> Answer {
         Answer {
             p: vec![vec![(0, 0, 0, 0); n]; d],
+            score,
         }
     }
 
@@ -38,5 +41,10 @@ impl Answer {
                 println!("{} {} {} {}", p.0, p.1, p.2, p.3);
             }
         }
+        eprintln!(
+            "result: {{\"score\": {}, \"duration\": {:.4}}}",
+            self.score,
+            time::elapsed_seconds(),
+        );
     }
 }
