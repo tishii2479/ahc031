@@ -245,25 +245,10 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
 
 fn solve(input: &Input) -> Answer {
     let (ws, r) = create_col_and_initial_r(input);
+
+    eprintln!("elapsed:   {:.4}", time::elapsed_seconds());
     let mut solver = Solver::new(ws.clone(), r.clone(), input);
-    solver.solve();
-
-    let mut ans = Answer::new(input.D, input.N);
-    for d in 0..input.D {
-        let mut width = 0;
-        for (col, rs) in r[d].iter().enumerate() {
-            let mut height = 0;
-            for &e in rs {
-                let h = ceil_div(input.A[d][e], ws[col]);
-                ans.p[d][e] = (height, width, height + h, width + ws[col]);
-                height += h;
-            }
-            width += ws[col];
-            eprint!("{:4}", height);
-        }
-        eprintln!();
-    }
-
+    let ans = solver.solve();
     ans
 }
 
@@ -272,4 +257,5 @@ fn main() {
     let input = Input::read_input();
     let ans = solve(&input);
     ans.output();
+    eprintln!("elapsed:   {:.4}", time::elapsed_seconds());
 }
