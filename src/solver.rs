@@ -1,9 +1,6 @@
 use crate::def::*;
 use crate::util::*;
 
-const POOL_SIZE: usize = 1000;
-const ROOT_NODE: usize = 0;
-
 /// Returns:
 /// match_count: i64 = 切り替えをした回数
 /// groups: Vec<(((usize, usize), (usize, usize), i64)> = 対応するノードの添字、次以降に使える余裕
@@ -18,12 +15,12 @@ fn match_greedy(
     Vec<((usize, usize), (usize, usize), i64)>,
     Vec<Vec<i64>>,
 ) {
-    let mut match_count = prev_h.len() + next_h.len();
+    let mut match_count = 0;
     let mut groups = vec![];
-    let mut next_rem = prev_rem.clone();
+    let mut new_prev_rem = prev_rem.clone();
 
+    let mut prev_rem_sum = 0;
     let mut next_rem_sum = w - next_h.iter().sum::<i64>();
-    let mut rems = vec![0; prev_h.len()];
 
     let mut prev_height = 0;
     let mut next_height = 0;
@@ -32,67 +29,333 @@ fn match_greedy(
     let mut prev_r = 0;
     let mut next_r = 0;
     while prev_r < prev_h.len() || next_r < next_h.len() {
-        if prev_r < prev_h.len() && prev_height < next_height {
+        if (prev_r < prev_h.len() && prev_height <= next_height) || next_r == next_h.len() {
             // 使えるようになる余裕を回収する
             for i in prev_r..prev_h.len() {
-                rems[i] += prev_rem[prev_r][i];
+                prev_rem_sum += new_prev_rem[prev_r][i];
+            }
+            // 回収する
+            if prev_r < prev_h.len() - 1 {
+                for i in 0..=prev_r {
+                    prev_height += new_prev_rem[i][prev_r];
+                    prev_rem_sum -= new_prev_rem[i][prev_r];
+                    new_prev_rem[i][prev_r] = 0;
+                }
             }
 
-            // 回収する
-            prev_height += rems[prev_r];
-            rems[prev_r] = 0;
+            prev_height += prev_h[prev_r];
             prev_r += 1;
         } else {
             next_height += next_h[next_r];
             next_r += 1;
         }
 
-        if prev_height == 0 || next_height == 0 {
+        if prev_l == prev_r || next_l == next_r {
+            continue;
+        }
+        if (prev_r == prev_h.len() && next_r < next_h.len())
+            || (prev_r < prev_h.len() && next_r == next_h.len())
+        {
             continue;
         }
 
-        if prev_height <= next_height && next_height <= prev_height + rems.iter().sum::<i64>() {
-            // prevを合わせられるなら合わせる
+        eprintln!(
+            "a: pl: {}, pr: {}, nl: {}, nr: {}, ph: {}, nh: {}, pr_sum: {}, nr_sum: {}",
+            prev_l, prev_r, next_l, next_r, prev_height, next_height, prev_rem_sum, next_rem_sum
+        );
+        if prev_height <= next_height && next_height <= prev_height + prev_rem_sum {
+            // NOTE: 最終的な更新でだけする必要がある
             let mut use_prev_rem = next_height - prev_height;
-            for i in 0..rems.len() {
-                let r = rems[i].min(use_prev_rem);
-                rems[i] -= r;
-                use_prev_rem -= r;
+            prev_rem_sum -= use_prev_rem;
+            for i in 0..prev_h.len() {
+                for j in i..prev_h.len() {
+                    if i <= prev_r - 1 && prev_r - 1 <= j {
+                        let r = new_prev_rem[i][j].min(use_prev_rem);
+                        new_prev_rem[i][j] -= r;
+                        use_prev_rem -= r;
+                    }
+                }
             }
+            assert_eq!(use_prev_rem, 0, "{:?} {:?}", prev_rem, new_prev_rem);
             groups.push(((prev_l, prev_r), (next_l, next_r), 0));
+            prev_height = next_height;
             prev_l = prev_r;
             next_l = next_r;
-            match_count -= 2;
+            match_count += 1;
         } else if next_height <= prev_height && prev_height <= next_height + next_rem_sum {
             // nextを合わせられるなら合わせる
             let use_next_rem = prev_height - next_height;
             next_rem_sum -= use_next_rem;
+
             groups.push(((prev_l, prev_r), (next_l, next_r), use_next_rem));
+            next_height = prev_height;
             prev_l = prev_r;
             next_l = next_r;
-            match_count -= 2;
+            match_count += 1;
         }
     }
 
-    (match_count, groups, next_rem)
+    (match_count, groups, new_prev_rem)
 }
 
-struct Solver<'a> {
+#[test]
+fn test_match_greedy() {
+    fn create_rem_mat(len: usize, rem: Vec<(usize, usize, i64)>) -> Vec<Vec<i64>> {
+        let mut mat = vec![vec![0; len]; len];
+        for (l, r, val) in rem {
+            mat[l][r] += val;
+        }
+        mat
+    }
+
+    fn assert_match_result(
+        prev_h: &Vec<i64>,
+        next_h: &Vec<i64>,
+        groups: &Vec<((usize, usize), (usize, usize), i64)>,
+        new_prev_rem: &Vec<Vec<i64>>,
+        w: i64,
+    ) {
+        let used_next_rem = groups.iter().map(|x| x.2).sum::<i64>();
+        let remain_prev_rem = new_prev_rem
+            .iter()
+            .map(|x| x.iter().sum::<i64>())
+            .sum::<i64>();
+        let next_h_sum = next_h.iter().sum::<i64>();
+        assert_eq!(
+            used_next_rem + remain_prev_rem + next_h_sum,
+            w,
+            "used_next_rem: {}, remain_prev_rem: {}, next_h_sum: {}",
+            used_next_rem,
+            remain_prev_rem,
+            next_h_sum
+        );
+        assert_eq!(groups.iter().map(|x| x.0 .1).max().unwrap(), prev_h.len());
+        assert_eq!(groups.iter().map(|x| x.1 .1).max().unwrap(), next_h.len());
+    }
+
+    const W: i64 = 100;
+
+    // 1:1
+    {
+        let prev_h = vec![40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 60)]);
+        let next_h = vec![80];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![80];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20)]);
+        let next_h = vec![40];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+    }
+
+    // 1:2
+    {
+        let prev_h = vec![40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 60)]);
+        let next_h = vec![20, 30];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![60];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 40)]);
+        let next_h = vec![20, 30];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![60];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 40)]);
+        let next_h = vec![60, 20];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+    }
+
+    // 2:1
+    {
+        let prev_h = vec![20, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 40)]);
+        let next_h = vec![10];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 40)]);
+        let next_h = vec![80];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 40)]);
+        let next_h = vec![30];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(1, 1, 40)]);
+        let next_h = vec![30];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 40)]);
+        let next_h = vec![30];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+    }
+
+    // 2:2
+    {
+        let prev_h = vec![20, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (1, 1, 30)]);
+        let next_h = vec![20, 30];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
+        let next_h = vec![20, 30];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
+        let next_h = vec![20, 40];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
+        let next_h = vec![20, 20];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
+        let next_h = vec![30, 20];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
+        let next_h = vec![50, 20];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
+        let next_h = vec![80, 10];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![20, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (1, 1, 30)]);
+        let next_h = vec![80, 10];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![60, 30];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 10)]);
+        let next_h = vec![60, 10];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+    }
+
+    // 3:1
+    {
+        let prev_h = vec![10, 10, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 20), (0, 2, 20)]);
+        let next_h = vec![10];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![10, 10, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 20), (2, 2, 20)]);
+        let next_h = vec![10];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 1);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+    }
+
+    // 3:2
+    {
+        let prev_h = vec![10, 10, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (1, 2, 20)]);
+        let next_h = vec![50, 40];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+        let prev_h = vec![10, 10, 40];
+        let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 20), (0, 2, 20)]);
+        let next_h = vec![50, 40];
+        let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        assert_eq!(match_count, 2);
+        assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+    }
+
+    // 3:3
+    let prev_h = vec![20, 30, 40];
+    let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 2, 10)]);
+    let next_h = vec![20, 30, 40];
+    let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+    assert_eq!(match_count, 3);
+    assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+    let prev_h = vec![20, 30, 40];
+    let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 2, 10)]);
+    let next_h = vec![10];
+    let (match_count, groups, new_prev_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+    assert_eq!(match_count, 1);
+    assert_match_result(&prev_h, &next_h, &groups, &new_prev_rem, W);
+
+    dbg!(&match_count, &groups, &new_prev_rem);
+}
+
+pub struct Solver<'a> {
     state: State,
     input: &'a Input,
 }
 
 impl<'a> Solver<'a> {
-    fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, input: &Input) -> Solver {
+    pub fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, input: &Input) -> Solver {
         Solver {
-            state: State::new(ws, r, POOL_SIZE, input.W),
+            state: State::new(ws, r, input.W, input.D),
             input,
         }
     }
 
-    fn solve(&mut self) {
+    pub fn solve(&mut self) {
         for d in 0..self.input.D {
-            self.state.setup_prev_rems(d, self.input);
+            let col = 0;
+            let next_h: Vec<i64> = self.state.r[d][col]
+                .iter()
+                .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
+                .collect();
+            eprintln!("{:?}", next_h);
+        }
+        for d in 0..self.input.D {
+            self.state.setup_prev_rems(d);
             for col in 0..self.state.ws.len() {
                 let next_h = self.state.r[d][col]
                     .iter()
@@ -104,7 +367,8 @@ impl<'a> Solver<'a> {
                     &next_h,
                     self.input.W,
                 );
-                self.state.score += match_count as i64 * self.state.ws[col];
+                let switch_count = self.state.prev_h[col].len() + next_h.len() - match_count * 2;
+                self.state.score += switch_count as i64 * self.state.ws[col];
                 self.state.trees[col].return_rem(&mut new_prev_rem);
 
                 let mut next_nodes = vec![];
@@ -114,7 +378,15 @@ impl<'a> Solver<'a> {
                     let next_h = &next_h[next_g.0..next_g.1].to_vec();
                     next_nodes.extend(self.state.trees[col].connect(prev_nodes, &next_h, rem));
                 }
-                self.state.node_idx[col].push(next_nodes);
+                assert_eq!(
+                    next_nodes.len(),
+                    self.state.r[d][col].len(),
+                    "{:?} {:?} {:?}",
+                    groups,
+                    &self.state.prev_h[col],
+                    next_h
+                );
+                self.state.node_idx[d + 1].push(next_nodes);
             }
         }
     }
@@ -127,30 +399,32 @@ struct State {
     // node_idx[d][col][i]
     node_idx: Vec<Vec<Vec<usize>>>,
     trees: Vec<StackTree>,
+    // prev_h[col][i]
     prev_h: Vec<Vec<i64>>,
+    // prev_h[col][l][r]
     prev_rem: Vec<Vec<Vec<i64>>>,
     score: i64,
 }
 
 impl State {
-    fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, pool_size: usize, w: i64) -> State {
-        let col = ws.len();
+    fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, w: i64, d: usize) -> State {
+        let col_count = ws.len();
         let mut state = State {
             ws,
             r,
-            trees: vec![StackTree::new(w); col],
-            node_idx: vec![vec![]; col],
-            prev_h: vec![vec![]; col],
-            prev_rem: vec![vec![]; col],
+            trees: vec![StackTree::new(w); col_count],
+            node_idx: vec![vec![]; d + 1],
+            prev_h: vec![vec![]; col_count],
+            prev_rem: vec![vec![]; col_count],
             score: 0,
         };
-        for i in 0..col {
-            state.node_idx[i].push(vec![state.trees[i].root_node]);
+        for col in 0..col_count {
+            state.node_idx[0].push(vec![state.trees[col].root_node]);
         }
         state
     }
 
-    fn setup_prev_rems(&mut self, d: usize, input: &Input) {
+    fn setup_prev_rems(&mut self, d: usize) {
         for col in 0..self.ws.len() {
             let prev_nodes = &self.node_idx[d][col];
             let prev_h: Vec<i64> = prev_nodes
@@ -195,6 +469,7 @@ impl StackTree {
         next_heights: &Vec<i64>,
         rem: i64,
     ) -> Vec<usize> {
+        dbg!(&prev_nodes, &next_heights, rem);
         let inter_node = self.new_node(rem, 0);
         for &par_node in prev_nodes.iter() {
             self.nodes[par_node].children.push(inter_node);
@@ -213,6 +488,8 @@ impl StackTree {
     }
 
     fn gen_rem(&mut self, prev_nodes: &Vec<usize>) -> Vec<Vec<i64>> {
+        // ISSUE: めっちゃ遅い
+
         // rem[i][j] := iから使い始められて、jまでには消費する必要がある余裕
         let mut rem = vec![vec![0; prev_nodes.len()]; prev_nodes.len()];
 
@@ -230,6 +507,7 @@ impl StackTree {
         for (i, &node_idx) in prev_nodes.iter().enumerate() {
             let mut q = vec![node_idx];
             while let Some(v) = q.pop() {
+                // dbg!(&v, &self.nodes[v]);
                 self.nodes[v].node_l = self.nodes[v].node_l.min(i);
                 self.nodes[v].node_r = self.nodes[v].node_r.max(i);
                 for &u in self.nodes[v].parents.iter() {
@@ -241,7 +519,8 @@ impl StackTree {
         // 余裕があるノードを全て拾い、remに保管する
         let mut q = vec![self.root_node];
         while let Some(v) = q.pop() {
-            rem[self.nodes[v].node_l][self.nodes[v].node_l] += self.nodes[v].rem;
+            // dbg!(&v, &self.nodes[v]);
+            rem[self.nodes[v].node_l][self.nodes[v].node_r] += self.nodes[v].rem;
             self.nodes[v].rem = 0;
             for &u in self.nodes[v].children.iter() {
                 q.push(u);
@@ -264,7 +543,7 @@ impl StackTree {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Node {
     parents: Vec<usize>,  // 親ノード
     children: Vec<usize>, // 子ノード
