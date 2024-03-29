@@ -691,28 +691,6 @@ impl StackTree {
 
         rem
     }
-
-    fn return_rem(&mut self, rem: &mut Vec<Vec<i64>>) {
-        let mut q = vec![self.root_node];
-        let mut seen = HashSet::new();
-        seen.insert(self.root_node);
-        while let Some(v) = q.pop() {
-            let restore_rem =
-                rem[self.nodes[v].node_l][self.nodes[v].node_r].min(self.nodes[v].rem);
-            self.nodes[v].rem = restore_rem;
-            rem[self.nodes[v].node_l][self.nodes[v].node_r] -= restore_rem;
-            for &u in self.nodes[v].children.iter() {
-                if !seen.insert(u) {
-                    continue;
-                }
-                q.push(u);
-            }
-        }
-    }
-
-    fn prune(&mut self) {
-        todo!()
-    }
 }
 
 #[derive(Clone, Debug)]
