@@ -352,6 +352,8 @@ impl<'a> Solver<'a> {
         let start = time::elapsed_seconds();
         let mut a = 0.;
 
+        let mut total_cost = 0;
+
         for d in 0..self.input.D {
             // 事前計算
             let prev_h: Vec<Vec<i64>> = (0..self.state.ws.len())
@@ -381,9 +383,9 @@ impl<'a> Solver<'a> {
                 let switch_count = if d == 0 {
                     0
                 } else {
-                    next_h.len() + prev_h.len() - match_count
+                    next_h.len() + prev_h[col].len() - match_count * 2
                 };
-                self.state.score += switch_count as i64 * self.state.ws[col];
+                total_cost += switch_count as i64 * self.state.ws[col];
 
                 let mut next_nodes = vec![];
                 for i in 0..groups.len() {
@@ -398,7 +400,7 @@ impl<'a> Solver<'a> {
         let total = time::elapsed_seconds() - start;
         eprintln!("a: {:.5} ({:.5})", a, a / total);
 
-        let mut ans = Answer::new(self.input.D, self.input.N, self.state.score);
+        let mut ans = Answer::new(self.input.D, self.input.N, total_cost);
         let mut width = 0;
         for col in 0..self.state.ws.len() {
             let w = self.state.ws[col];
@@ -419,6 +421,9 @@ impl<'a> Solver<'a> {
         ans
     }
 
+    /// TODO:
+    /// - d=0だけ特別に処理する（d=1）からにする
+    /// - d=0は余裕だけを評価する
     fn optimize_r(&mut self, prev_h: &Vec<Vec<i64>>, prev_rem: &Vec<Vec<Vec<i64>>>, d: usize) {
         let mut current_score_col: Vec<i64> = (0..self.state.ws.len())
             .map(|col| {
@@ -490,13 +495,6 @@ impl<'a> Solver<'a> {
                 }
             }
         }
-
-        // TODO:
-        // - d=0だけ特別に処理する（d=1）からにする
-        // - d=0は余裕だけを評価する
-        if d == 0 {
-            self.state.score = 0;
-        }
     }
 }
 
@@ -507,7 +505,6 @@ struct State {
     // node_idx[d][col][i]
     node_idx: Vec<Vec<Vec<usize>>>,
     trees: Vec<StackTree>,
-    score: i64,
 }
 
 impl State {
@@ -518,26 +515,11 @@ impl State {
             r,
             trees: vec![StackTree::new(w); col_count],
             node_idx: vec![vec![]; d + 1],
-            score: 0,
         };
         for col in 0..col_count {
             state.node_idx[0].push(vec![state.trees[col].root_node]);
         }
         state
-    }
-
-    fn eval(
-        &self,
-        d: usize,
-        prev_h: &Vec<Vec<i64>>,
-        prev_rem: &Vec<Vec<Vec<i64>>>,
-        input: &Input,
-    ) -> i64 {
-        let mut score = 0;
-        for col in 0..self.ws.len() {
-            score += self.eval_col(d, col, &prev_h[col], &prev_rem[col], input);
-        }
-        score
     }
 
     fn eval_col(
