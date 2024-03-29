@@ -66,10 +66,6 @@ fn match_greedy(
             continue;
         }
 
-        // eprintln!(
-        //     "a: pl: {}, pr: {}, nl: {}, nr: {}, ph: {}, nh: {}, pr_sum: {}, nr_sum: {}",
-        //     prev_l, prev_r, next_l, next_r, prev_height, next_height, prev_rem_sum, next_rem_sum
-        // );
         if prev_height <= next_height && next_height <= prev_height + prev_rem_sum {
             // NOTE: 最終的な更新でだけする必要がある
             let mut use_prev_rem = next_height - prev_height;
@@ -355,16 +351,6 @@ impl<'a> Solver<'a> {
     pub fn solve(&mut self) -> Answer {
         for d in 0..self.input.D {
             for col in 0..self.state.ws.len() {
-                let next_h: Vec<i64> = self.state.r[d][col]
-                    .iter()
-                    .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
-                    .collect();
-                eprintln!("{:?}", next_h);
-            }
-            eprintln!();
-        }
-        for d in 0..self.input.D {
-            for col in 0..self.state.ws.len() {
                 let prev_nodes = &self.state.node_idx[d][col];
                 let prev_h: Vec<i64> = prev_nodes
                     .iter()
@@ -379,8 +365,10 @@ impl<'a> Solver<'a> {
                 let (match_count, groups, _) =
                     match_greedy(&prev_h, &prev_rem, &next_h, self.input.W);
                 let switch_count = prev_h.len() + next_h.len() - match_count * 2;
-                self.state.score += switch_count as i64 * self.state.ws[col];
-                // self.state.trees[col].return_rem(&mut new_prev_rem); // 不要？
+
+                if d > 0 {
+                    self.state.score += switch_count as i64 * self.state.ws[col];
+                }
 
                 let mut next_nodes = vec![];
                 for i in 0..groups.len() {
@@ -569,7 +557,6 @@ impl StackTree {
         }
 
         rem_cand_node.sort();
-        dbg!(&rem_cand_node);
         let mut use_rem_nodes = HashMap::new();
         for (_, node_idx, rem) in rem_cand_node {
             let use_rem = rem.min(need_rem);
@@ -596,7 +583,6 @@ impl StackTree {
         if let Some(&use_rem) = use_rem_nodes.get(&v) {
             for &u in q.iter() {
                 if self.nodes[u].height > 0 {
-                    dbg!(u, use_rem, self.nodes[u].height);
                     self.nodes[u].height += use_rem;
                 }
             }
@@ -640,7 +626,6 @@ impl StackTree {
         let mut rem = vec![vec![0; prev_nodes.len()]; prev_nodes.len()];
 
         // node_l、node_rをリセットする
-        eprintln!("a: {} {:?}", time::elapsed_seconds(), prev_nodes);
         let mut q = vec![self.root_node];
         let mut seen = HashSet::new();
         seen.insert(self.root_node);
@@ -655,7 +640,6 @@ impl StackTree {
             }
         }
 
-        eprintln!("b: {} {:?}", time::elapsed_seconds(), prev_nodes);
         // prev_nodesから昇って、node_l、node_rを設定する
         for (i, &node_idx) in prev_nodes.iter().enumerate() {
             let mut q = vec![node_idx];
@@ -673,7 +657,6 @@ impl StackTree {
             }
         }
 
-        eprintln!("c: {} {:?}", time::elapsed_seconds(), prev_nodes);
         // 余裕があるノードを全て拾い、remに保管する
         let mut q = vec![self.root_node];
         let mut seen = HashSet::new();
@@ -687,7 +670,6 @@ impl StackTree {
                 q.push(u);
             }
         }
-        eprintln!("d: {} {:?}", time::elapsed_seconds(), prev_nodes);
 
         rem
     }

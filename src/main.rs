@@ -9,7 +9,7 @@ use crate::util::*;
 const FIRST_TIME_LIMIT: f64 = 1.;
 
 fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
-    let mut ws = vec![200; 5];
+    let mut ws = vec![1000; 1];
     let mut r = vec![vec![vec![]; ws.len()]; input.D];
 
     // 初期状態の作成
