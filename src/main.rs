@@ -175,10 +175,13 @@ fn main() {
 
         start_cands.push((score, ws, r));
     }
+
     eprintln!("aa: {}", time::elapsed_seconds());
 
     start_cands.sort();
     let (_, ws, r) = start_cands[0].clone();
+    eprintln!("ws: {:?}", ws);
+
     let mut solver = Solver::new(ws, r, &input);
     let ans = solver.solve();
     ans.output();

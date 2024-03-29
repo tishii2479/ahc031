@@ -91,18 +91,19 @@ fn match_greedy(
     (match_count, groups, prev_pickup_rems)
 }
 
-fn get_squeezed_height(r_idx: &Vec<usize>, d: usize, w: i64, input: &Input) -> (Vec<i64>, i64) {
-    let mut heights = r_idx
-        .iter()
-        .map(|&r_idx| ceil_div(input.A[d][r_idx], w))
-        .collect::<Vec<i64>>();
-
+fn get_squeezed_height(
+    mut heights: Vec<i64>,
+    r_idx: &Vec<usize>,
+    d: usize,
+    w: i64,
+    input: &Input,
+) -> (Vec<i64>, i64) {
     // 超過してしまう場合は、縮めることで損をしない領域（余りが大きい領域）を縮める
     let required_height = heights.iter().sum::<i64>();
     let mut over_height = (required_height - input.W).max(0);
     let mut exceed_cost = 0;
     if over_height > 0 {
-        let mut space_for_r_idx = (0..r_idx.len())
+        let mut space_for_r_idx = (0..heights.len())
             .map(|i| {
                 let d = input.A[d][r_idx[i]] % w;
                 (if d == 0 { w } else { d }, i)
@@ -138,8 +139,6 @@ impl<'a> Solver<'a> {
 
     pub fn solve(&mut self) -> Answer {
         let mut total_cost = 0;
-        let mut a = 0.;
-        let total = time::elapsed_seconds();
 
         for d in 0..self.input.D {
             // 事前計算
@@ -159,8 +158,13 @@ impl<'a> Solver<'a> {
 
             // 事後計算
             for col in 0..self.state.ws.len() {
+                let r_idx = &self.state.r[d][col];
+                let mut heights = r_idx
+                    .iter()
+                    .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
+                    .collect::<Vec<i64>>();
                 let (next_h, exceed_cost) =
-                    get_squeezed_height(&self.state.r[d][col], d, self.state.ws[col], self.input);
+                    get_squeezed_height(heights, &r_idx, d, self.state.ws[col], self.input);
                 let (match_count, groups, _) =
                     match_greedy(&prev_h[col], &prev_rem[col], &next_h, self.input.W);
                 let switch_count = if d == 0 {
@@ -181,9 +185,6 @@ impl<'a> Solver<'a> {
                 self.state.node_idx[d + 1].push(next_nodes);
             }
         }
-
-        let total = time::elapsed_seconds() - total;
-        eprintln!("a / total: {:.5} / {:.5}", a, total);
 
         self.create_answer(total_cost)
     }
@@ -214,25 +215,28 @@ impl<'a> Solver<'a> {
 
     /// TODO: d=0は余裕だけを評価する
     fn optimize_r(&mut self, prev_h: &Vec<Vec<i64>>, prev_rem: &Vec<Vec<Vec<i64>>>, d: usize) {
-        let mut cur_score_col: Vec<i64> = (0..self.state.ws.len())
+        let mut cur_score_col: Vec<(i64, i64)> = (0..self.state.ws.len())
             .map(|col| {
                 self.state
-                    .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input)
+                    .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input, true)
             })
             .collect();
-        let mut cur_score = cur_score_col.iter().sum::<i64>();
+        let mut cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
 
-        let iteration = 10000;
+        let iteration = 100000;
         let start_temp: f64 = 100.;
         let end_temp: f64 = 0.1;
 
         eprintln!("start_cur_score: {}", cur_score);
+        let total = time::elapsed_seconds();
+        let mut a = 0.;
 
         for t in 0..iteration {
             let progress = t as f64 / iteration as f64;
             let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
+
             if p < 0.5 {
                 // 列内1:1swap
                 let col = rnd::gen_index(self.state.ws.len());
@@ -243,12 +247,18 @@ impl<'a> Solver<'a> {
                 if i == j {
                     continue;
                 }
-                self.state.r[d][col].swap(i, j);
 
-                let new_score_col =
-                    self.state
-                        .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input);
-                let score_diff = new_score_col - cur_score_col[col];
+                self.state.r[d][col].swap(i, j);
+                let new_score_col = self.state.eval_col(
+                    d,
+                    col,
+                    &prev_h[col],
+                    &prev_rem[col],
+                    self.input,
+                    cur_score_col[col].1 > 0,
+                );
+                let score_diff =
+                    new_score_col.0 + new_score_col.1 - cur_score_col[col].0 - cur_score_col[col].1;
                 if (score_diff as f64) <= threshold {
                     // eprintln!(
                     //     "[{:5}] swap-in-col: {} -> {}",
@@ -277,14 +287,28 @@ impl<'a> Solver<'a> {
                 (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
                     (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
 
-                let new_score_col1 =
-                    self.state
-                        .eval_col(d, col1, &prev_h[col1], &prev_rem[col1], self.input);
-                let new_score_col2 =
-                    self.state
-                        .eval_col(d, col2, &prev_h[col2], &prev_rem[col2], self.input);
+                let new_score_col1 = self.state.eval_col(
+                    d,
+                    col1,
+                    &prev_h[col1],
+                    &prev_rem[col1],
+                    self.input,
+                    cur_score_col[col1].1 > 0,
+                );
+                let new_score_col2 = self.state.eval_col(
+                    d,
+                    col2,
+                    &prev_h[col2],
+                    &prev_rem[col2],
+                    self.input,
+                    cur_score_col[col2].1 > 0,
+                );
                 let score_diff =
-                    new_score_col1 + new_score_col2 - cur_score_col[col1] - cur_score_col[col2];
+                    new_score_col1.0 + new_score_col1.1 + new_score_col2.0 + new_score_col2.1
+                        - cur_score_col[col1].0
+                        - cur_score_col[col1].1
+                        - cur_score_col[col2].0
+                        - cur_score_col[col2].1;
 
                 if (score_diff as f64) <= threshold {
                     // eprintln!(
@@ -303,6 +327,8 @@ impl<'a> Solver<'a> {
             }
         }
 
+        let total = time::elapsed_seconds() - total;
+        eprintln!("a / total: {:.5} / {:.5}", a, total);
         eprintln!("end_cur_score: {}", cur_score);
     }
 }
@@ -338,12 +364,18 @@ impl State {
         prev_h: &Vec<i64>,
         prev_rem: &Vec<Vec<i64>>,
         input: &Input,
-    ) -> i64 {
-        let (next_h, exceed_cost) = get_squeezed_height(&self.r[d][col], d, self.ws[col], input);
-        if next_h.iter().sum::<i64>() > input.W {
-            return 1 << 50;
+        allow_overflow: bool,
+    ) -> (i64, i64) {
+        let r_idx = &self.r[d][col];
+        let heights = r_idx
+            .iter()
+            .map(|&r_idx| ceil_div(input.A[d][r_idx], self.ws[col]))
+            .collect::<Vec<i64>>();
+        if !allow_overflow && heights.iter().sum::<i64>() > input.W {
+            return (0, 1 << 40);
         }
-
+        let (next_h, exceed_cost) =
+            get_squeezed_height(heights, &self.r[d][col], d, self.ws[col], input);
         let (match_count, _, _) = match_greedy(&prev_h, &prev_rem, &next_h, input.W);
         let switch_count = prev_h.len() + next_h.len() - match_count * 2;
 
@@ -353,7 +385,7 @@ impl State {
         // let next_rem = groups.iter().map(|g| g.2).sum::<i64>();
         // let rem = prev_rem + next_rem;
 
-        switch_count as i64 * self.ws[col] + exceed_cost
+        (switch_count as i64 * self.ws[col], exceed_cost)
     }
 }
 
