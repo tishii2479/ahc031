@@ -11,7 +11,7 @@ use crate::util::*;
 /// prev_pickup_rem: Vec<i64> = 前の余裕の消費具合
 fn match_greedy(
     prev_h: &Vec<i64>,
-    prev_rem: &Vec<Vec<i64>>,
+    prev_rem: &Vec<Vec<(usize, i64)>>,
     next_h: &Vec<i64>,
     w: i64,
 ) -> (usize, Vec<((usize, usize), (usize, usize), i64)>, Vec<i64>) {
@@ -31,9 +31,9 @@ fn match_greedy(
     while prev_r < prev_h.len() || next_r < next_h.len() {
         if (prev_r < prev_h.len() && prev_height <= next_height) || next_r == next_h.len() {
             // 使えるようになる余裕を回収する
-            for i in prev_r..prev_h.len() {
-                prev_pickup_rems[i] += prev_rem[prev_r][i];
-                prev_rem_sum += prev_rem[prev_r][i];
+            for &(r, rem) in prev_rem[prev_r].iter() {
+                prev_pickup_rems[r] += rem;
+                prev_rem_sum += rem;
             }
 
             // 回収する
@@ -150,7 +150,7 @@ impl<'a> Solver<'a> {
                         .collect()
                 })
                 .collect();
-            let prev_rem: Vec<Vec<Vec<i64>>> = (0..self.state.ws.len())
+            let prev_rem: Vec<Vec<Vec<(usize, i64)>>> = (0..self.state.ws.len())
                 .map(|col| self.state.trees[col].gen_rem(&self.state.node_idx[d][col]))
                 .collect();
 
@@ -214,7 +214,12 @@ impl<'a> Solver<'a> {
     }
 
     /// TODO: d=0は余裕だけを評価する
-    fn optimize_r(&mut self, prev_h: &Vec<Vec<i64>>, prev_rem: &Vec<Vec<Vec<i64>>>, d: usize) {
+    fn optimize_r(
+        &mut self,
+        prev_h: &Vec<Vec<i64>>,
+        prev_rem: &Vec<Vec<Vec<(usize, i64)>>>,
+        d: usize,
+    ) {
         let mut cur_score_col: Vec<(i64, i64)> = (0..self.state.ws.len())
             .map(|col| {
                 self.state
@@ -428,7 +433,7 @@ impl State {
         d: usize,
         col: usize,
         prev_h: &Vec<i64>,
-        prev_rem: &Vec<Vec<i64>>,
+        prev_rem: &Vec<Vec<(usize, i64)>>,
         input: &Input,
         allow_overflow: bool,
     ) -> (i64, i64) {
@@ -601,10 +606,7 @@ impl StackTree {
         }
     }
 
-    fn gen_rem(&mut self, prev_nodes: &Vec<usize>) -> Vec<Vec<i64>> {
-        // rem[i][j] := iから使い始められて、jまでには消費する必要がある余裕
-        let mut rem = vec![vec![0; prev_nodes.len()]; prev_nodes.len()];
-
+    fn gen_rem(&mut self, prev_nodes: &Vec<usize>) -> Vec<Vec<(usize, i64)>> {
         // node_l、node_rをリセットする
         let mut q = vec![self.root_node];
         let mut seen = HashSet::new();
@@ -637,17 +639,33 @@ impl StackTree {
             }
         }
 
+        // rem[i][j] := iから使い始められて、jまでには消費する必要がある余裕
+        let mut total_rem = vec![vec![0; prev_nodes.len()]; prev_nodes.len()];
+
         // 余裕があるノードを全て拾い、remに保管する
         let mut q = vec![self.root_node];
         let mut seen = HashSet::new();
         seen.insert(self.root_node);
         while let Some(v) = q.pop() {
-            rem[self.nodes[v].node_l][self.nodes[v].node_r] += self.nodes[v].rem;
+            assert!(
+                self.nodes[v].node_l <= self.nodes[v].node_r
+                    && self.nodes[v].node_r < prev_nodes.len()
+            );
+            total_rem[self.nodes[v].node_l][self.nodes[v].node_r] += self.nodes[v].rem;
             for &u in self.nodes[v].children.iter() {
                 if !seen.insert(u) {
                     continue;
                 }
                 q.push(u);
+            }
+        }
+
+        let mut rem = vec![vec![]; prev_nodes.len()];
+        for l in 0..prev_nodes.len() {
+            for r in 0..prev_nodes.len() {
+                if total_rem[l][r] > 0 {
+                    rem[l].push((r, total_rem[l][r]));
+                }
             }
         }
 
@@ -680,10 +698,10 @@ impl Node {
 
 #[test]
 fn test_match_greedy() {
-    fn create_rem_mat(len: usize, rem: Vec<(usize, usize, i64)>) -> Vec<Vec<i64>> {
-        let mut mat = vec![vec![0; len]; len];
+    fn create_rem_mat(len: usize, rem: Vec<(usize, usize, i64)>) -> Vec<Vec<(usize, i64)>> {
+        let mut mat = vec![vec![]; len];
         for (l, r, val) in rem {
-            mat[l][r] += val;
+            mat[l].push((r, val));
         }
         mat
     }
