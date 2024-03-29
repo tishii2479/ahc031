@@ -349,26 +349,41 @@ impl<'a> Solver<'a> {
     }
 
     pub fn solve(&mut self) -> Answer {
+        let start = time::elapsed_seconds();
+        let mut a = 0.;
+
         for d in 0..self.input.D {
+            // 事前計算
+            let prev_h: Vec<Vec<i64>> = (0..self.state.ws.len())
+                .map(|col| {
+                    self.state.node_idx[d][col]
+                        .iter()
+                        .map(|&i| self.state.trees[col].nodes[i].height)
+                        .collect()
+                })
+                .collect();
+            let prev_rem: Vec<Vec<Vec<i64>>> = (0..self.state.ws.len())
+                .map(|col| self.state.trees[col].gen_rem(&self.state.node_idx[d][col]))
+                .collect();
+
+            a -= time::elapsed_seconds();
+            self.optimize_r(&prev_h, &prev_rem, d);
+            a += time::elapsed_seconds();
+
+            // 事後計算
             for col in 0..self.state.ws.len() {
-                let prev_nodes = &self.state.node_idx[d][col];
-                let prev_h: Vec<i64> = prev_nodes
-                    .iter()
-                    .map(|&i| self.state.trees[col].nodes[i].height)
-                    .collect();
-                let prev_rem = self.state.trees[col].gen_rem(&prev_nodes);
                 let next_h = self.state.r[d][col]
                     .iter()
                     .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
                     .collect();
-
                 let (match_count, groups, _) =
-                    match_greedy(&prev_h, &prev_rem, &next_h, self.input.W);
-                let switch_count = prev_h.len() + next_h.len() - match_count * 2;
-
-                if d > 0 {
-                    self.state.score += switch_count as i64 * self.state.ws[col];
-                }
+                    match_greedy(&prev_h[col], &prev_rem[col], &next_h, self.input.W);
+                let switch_count = if d == 0 {
+                    0
+                } else {
+                    next_h.len() + prev_h.len() - match_count
+                };
+                self.state.score += switch_count as i64 * self.state.ws[col];
 
                 let mut next_nodes = vec![];
                 for i in 0..groups.len() {
@@ -377,13 +392,13 @@ impl<'a> Solver<'a> {
                     let next_h = &next_h[next_g.0..next_g.1].to_vec();
                     next_nodes.extend(self.state.trees[col].connect(prev_nodes, &next_h, rem));
                 }
-
                 self.state.node_idx[d + 1].push(next_nodes);
             }
         }
+        let total = time::elapsed_seconds() - start;
+        eprintln!("a: {:.5} ({:.5})", a, a / total);
 
         let mut ans = Answer::new(self.input.D, self.input.N, self.state.score);
-
         let mut width = 0;
         for col in 0..self.state.ws.len() {
             let w = self.state.ws[col];
@@ -398,11 +413,90 @@ impl<'a> Solver<'a> {
                 }
                 assert_eq!(height, self.input.W, "{} {}", d, col);
             }
-
             width += w;
         }
 
         ans
+    }
+
+    fn optimize_r(&mut self, prev_h: &Vec<Vec<i64>>, prev_rem: &Vec<Vec<Vec<i64>>>, d: usize) {
+        let mut current_score_col: Vec<i64> = (0..self.state.ws.len())
+            .map(|col| {
+                self.state
+                    .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input)
+            })
+            .collect();
+        let mut current_score = current_score_col.iter().sum::<i64>();
+
+        for _ in 0..10000 {
+            let p = rnd::nextf();
+            if p < 0.5 {
+                // 列内1:1swap
+                let col = rnd::gen_index(self.state.ws.len());
+                let (i, j) = (
+                    rnd::gen_index(self.state.r[d][col].len()),
+                    rnd::gen_index(self.state.r[d][col].len()),
+                );
+                if i == j {
+                    continue;
+                }
+                self.state.r[d][col].swap(i, j);
+
+                let new_score_col =
+                    self.state
+                        .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input);
+                let score_diff = new_score_col - current_score_col[col];
+                if score_diff < 0 {
+                    eprintln!("{} -> {}", current_score, current_score + score_diff);
+                    current_score_col[col] = new_score_col;
+                    current_score += score_diff;
+                } else {
+                    self.state.r[d][col].swap(i, j);
+                }
+            } else {
+                // 列間1:1swap
+                let (col1, col2) = (
+                    rnd::gen_index(self.state.ws.len()),
+                    rnd::gen_index(self.state.ws.len()),
+                );
+                if col1 == col2 {
+                    continue;
+                }
+                let (i1, i2) = (
+                    rnd::gen_index(self.state.r[d][col1].len()),
+                    rnd::gen_index(self.state.r[d][col2].len()),
+                );
+                (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
+                    (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
+
+                let new_score_col1 =
+                    self.state
+                        .eval_col(d, col1, &prev_h[col1], &prev_rem[col1], self.input);
+                let new_score_col2 =
+                    self.state
+                        .eval_col(d, col2, &prev_h[col2], &prev_rem[col2], self.input);
+                let score_diff = new_score_col1 + new_score_col2
+                    - current_score_col[col1]
+                    - current_score_col[col2];
+
+                if score_diff < 0 {
+                    eprintln!("{} -> {}", current_score, current_score + score_diff);
+                    current_score_col[col1] = new_score_col1;
+                    current_score_col[col2] = new_score_col2;
+                    current_score += score_diff;
+                } else {
+                    (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
+                        (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
+                }
+            }
+        }
+
+        // TODO:
+        // - d=0だけ特別に処理する（d=1）からにする
+        // - d=0は余裕だけを評価する
+        if d == 0 {
+            self.state.score = 0;
+        }
     }
 }
 
@@ -430,6 +524,43 @@ impl State {
             state.node_idx[0].push(vec![state.trees[col].root_node]);
         }
         state
+    }
+
+    fn eval(
+        &self,
+        d: usize,
+        prev_h: &Vec<Vec<i64>>,
+        prev_rem: &Vec<Vec<Vec<i64>>>,
+        input: &Input,
+    ) -> i64 {
+        let mut score = 0;
+        for col in 0..self.ws.len() {
+            score += self.eval_col(d, col, &prev_h[col], &prev_rem[col], input);
+        }
+        score
+    }
+
+    fn eval_col(
+        &self,
+        d: usize,
+        col: usize,
+        prev_h: &Vec<i64>,
+        prev_rem: &Vec<Vec<i64>>,
+        input: &Input,
+    ) -> i64 {
+        let next_h = self.r[d][col]
+            .iter()
+            .map(|&r_idx| ceil_div(input.A[d][r_idx], self.ws[col]))
+            .collect::<Vec<i64>>();
+
+        if next_h.iter().sum::<i64>() > input.W {
+            return 1 << 30;
+        }
+
+        let (match_count, _, _) = match_greedy(&prev_h, &prev_rem, &next_h, input.W);
+        let switch_count = prev_h.len() + next_h.len() - match_count * 2;
+
+        switch_count as i64 * self.ws[col]
     }
 }
 
