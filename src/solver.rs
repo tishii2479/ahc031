@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
@@ -353,12 +354,14 @@ impl<'a> Solver<'a> {
 
     pub fn solve(&mut self) -> Answer {
         for d in 0..self.input.D {
-            let col = 1;
-            let next_h: Vec<i64> = self.state.r[d][col]
-                .iter()
-                .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
-                .collect();
-            eprintln!("{:?}", next_h);
+            for col in 0..self.state.ws.len() {
+                let next_h: Vec<i64> = self.state.r[d][col]
+                    .iter()
+                    .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
+                    .collect();
+                eprintln!("{:?}", next_h);
+            }
+            eprintln!();
         }
         for d in 0..self.input.D {
             for col in 0..self.state.ws.len() {
@@ -403,7 +406,6 @@ impl<'a> Solver<'a> {
                     let node_idx = self.state.node_idx[d + 1][col][i];
                     let h = self.state.trees[col].nodes[node_idx].height;
                     ans.p[d][r_idx] = (height, width, height + h, width + w);
-                    dbg!((height, width, height + h, width + w));
                     height += h;
                 }
                 assert_eq!(height, self.input.W, "{} {}", d, col);
@@ -445,10 +447,44 @@ impl State {
 
 #[test]
 fn test_stacktree() {
-    const W: i64 = 100;
+    const W: i64 = 1000;
     let mut tree = StackTree::new(W);
-    let mut hs = vec![vec![10, 20, 30], vec![20, 40, 30], vec![50, 20]];
-    for next_h in hs {}
+    let hs = vec![
+        vec![205, 409, 121],
+        vec![700, 122, 131],
+        vec![661, 80],
+        vec![984],
+        vec![619],
+    ];
+    let mut node_idx = vec![vec![]; hs.len() + 1];
+    let w = 10;
+    let mut score = 0;
+
+    node_idx[0] = vec![tree.root_node];
+
+    for (d, h) in hs.into_iter().enumerate() {
+        let prev_nodes = &node_idx[d];
+        let prev_h: Vec<i64> = prev_nodes.iter().map(|&i| tree.nodes[i].height).collect();
+        let prev_rem = tree.gen_rem(&prev_nodes);
+        let next_h = h;
+
+        let (match_count, groups, _) = match_greedy(&prev_h, &prev_rem, &next_h, W);
+        let switch_count = prev_h.len() + next_h.len() - match_count * 2;
+        score += switch_count as i64 * w;
+        // tree.return_rem(&mut new_prev_rem); // 不要？
+
+        let mut next_nodes = vec![];
+        for i in 0..groups.len() {
+            let (prev_g, next_g, rem) = groups[i];
+            let prev_nodes = &node_idx[d][prev_g.0..prev_g.1].to_vec();
+            let next_h = &next_h[next_g.0..next_g.1].to_vec();
+            next_nodes.extend(tree.connect(prev_nodes, &next_h, rem));
+        }
+
+        node_idx[d + 1] = next_nodes;
+    }
+
+    eprintln!("{}", score);
 }
 
 #[derive(Clone)]
@@ -519,37 +555,61 @@ impl StackTree {
         let mut q = vec![inter_node];
         let mut seen = HashSet::new();
         seen.insert(inter_node);
-        self.back_dfs(&mut q, &mut seen, &mut need_rem);
+        let mut rem_cand_node = vec![];
+        while let Some(v) = q.pop() {
+            if self.nodes[v].rem > 0 {
+                rem_cand_node.push((self.nodes[v].node_r, v, self.nodes[v].rem));
+            }
+            for &u in self.nodes[v].parents.iter() {
+                if !seen.insert(u) {
+                    continue;
+                }
+                q.push(u);
+            }
+        }
+
+        rem_cand_node.sort();
+        dbg!(&rem_cand_node);
+        let mut use_rem_nodes = HashMap::new();
+        for (_, node_idx, rem) in rem_cand_node {
+            let use_rem = rem.min(need_rem);
+            use_rem_nodes.insert(node_idx, use_rem);
+            need_rem -= use_rem;
+            self.nodes[node_idx].rem -= use_rem;
+        }
         assert_eq!(need_rem, 0);
+
+        let mut q = vec![inter_node];
+        let mut seen = HashSet::new();
+        self.back_dfs(&mut q, &mut seen, &mut use_rem_nodes);
     }
 
     // need_remをparentsから貰いに行く
     // もらったら、経路上の全てのheightに足す
-    fn back_dfs(&mut self, q: &mut Vec<usize>, seen: &mut HashSet<usize>, need_rem: &mut i64) {
-        if *need_rem <= 0 {
-            return;
-        }
+    fn back_dfs(
+        &mut self,
+        q: &mut Vec<usize>,
+        seen: &mut HashSet<usize>,
+        use_rem_nodes: &HashMap<usize, i64>,
+    ) {
         let v = *q.last().unwrap();
-        if self.nodes[v].rem > 0 {
-            let move_rem = self.nodes[v].rem.min(*need_rem);
+        if let Some(&use_rem) = use_rem_nodes.get(&v) {
             for &u in q.iter() {
                 if self.nodes[u].height > 0 {
-                    dbg!(u, move_rem, self.nodes[u].height);
-                    self.nodes[u].height += move_rem;
+                    dbg!(u, use_rem, self.nodes[u].height);
+                    self.nodes[u].height += use_rem;
                 }
             }
-            *need_rem -= move_rem;
-            self.nodes[v].rem -= move_rem;
         }
-        let par = self.nodes[v].parents.clone();
-        for &u in par.iter().rev() {
+        let par = self.nodes[v].parents.clone(); // TODO: remove
+        for &u in par.iter() {
             if !seen.insert(u) {
                 continue;
             }
             q.push(u);
-            self.back_dfs(q, seen, need_rem);
+            self.back_dfs(q, seen, use_rem_nodes);
+            q.pop();
         }
-        q.pop();
     }
 
     /// remを最初の子孫のheightに渡す
@@ -596,7 +656,7 @@ impl StackTree {
         }
 
         eprintln!("b: {} {:?}", time::elapsed_seconds(), prev_nodes);
-        // node_idxから上方向に昇って、node_l、node_rを設定する
+        // prev_nodesから昇って、node_l、node_rを設定する
         for (i, &node_idx) in prev_nodes.iter().enumerate() {
             let mut q = vec![node_idx];
             let mut seen = HashSet::new();
