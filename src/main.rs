@@ -8,11 +8,8 @@ use crate::util::*;
 
 const FIRST_TIME_LIMIT: f64 = 1.;
 
-fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
-    let mut ws = vec![200; 5];
+fn best_fit(ws: &Vec<i64>, input: &Input) -> Vec<Vec<Vec<usize>>> {
     let mut r = vec![vec![vec![]; ws.len()]; input.D];
-
-    // 初期状態の作成
     for d in 0..input.D {
         let mut height = vec![0; ws.len()];
         for i in (0..input.N).rev() {
@@ -46,149 +43,49 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
                 height[best_j] += ceil_div(a, ws[best_j]);
             }
         }
-        eprintln!("height:  {:?}", height);
     }
+    r
+}
 
-    fn eval_d(d: usize, ws: &Vec<i64>, r: &Vec<Vec<Vec<usize>>>, input: &Input) -> i64 {
-        let mut score = 0;
-        for (col, rs) in r[d].iter().enumerate() {
-            let mut height = 0;
-            for &i in rs {
-                height += ceil_div(input.A[d][i], ws[col]);
-            }
-            if height > input.W {
-                score += (height - input.W) * ws[col] * 1000;
-            } else if rs.len() > 0 {
-                // 含まれていない列はスコアに加算しない
-                score -= (input.W - height) * ws[col];
-            }
+fn eval_d(d: usize, ws: &Vec<i64>, r: &Vec<Vec<Vec<usize>>>, input: &Input) -> i64 {
+    let mut score = 0;
+    for (col, rs) in r[d].iter().enumerate() {
+        let mut height = 0;
+        for &i in rs {
+            height += ceil_div(input.A[d][i], ws[col]);
         }
-        score
+        if height > input.W {
+            score += (height - input.W) * ws[col] * 1000;
+        } else if rs.len() > 0 {
+            // 含まれていない列はスコアに加算しない
+            score -= (input.W - height) * ws[col];
+        }
     }
+    score
+}
 
-    fn eval(ws: &Vec<i64>, r: &Vec<Vec<Vec<usize>>>, input: &Input) -> i64 {
-        let mut score = 0;
-        for d in 0..input.D {
-            score += eval_d(d, ws, &r, input);
-        }
-        score
+fn eval(ws: &Vec<i64>, r: &Vec<Vec<Vec<usize>>>, input: &Input) -> i64 {
+    let mut score = 0;
+    for d in 0..input.D {
+        score += eval_d(d, ws, &r, input);
     }
+    score
+}
+
+fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
+    let mut ws = vec![200; 5];
+
+    // 初期状態の作成
+    let mut r = best_fit(&ws, input);
 
     let mut cur_score = eval(&ws, &r, input);
     let mut iteration = 0;
     eprintln!("cur_score    = {}", cur_score);
 
     // while time::elapsed_seconds() < FIRST_TIME_LIMIT {
-    for t in 0..10000000 {
-        let mut p = rnd::nextf();
-        if t < 0 {
-            p *= 0.6;
-        } else {
-            p = p * 0.4 + 0.6;
-        }
-        if p < 0.2 {
-            // 列iを列jにマージする
-            let (i, j) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));
-            if i == j {
-                continue;
-            }
-            let _ws = ws.clone();
-            let _r = r.clone();
-            ws[j] += ws[i];
-            ws.remove(i);
-            for d in 0..input.D {
-                let rs = r[d].remove(i);
-                let j = if j < i { j } else { j - 1 }; // NOTE: j>=iの時はindexがずれている
-                r[d][j].extend(rs); // NOTE: マージソートすれば昇順が保たれる
-            }
-            let new_score = eval(&ws, &r, input);
-            if new_score < cur_score {
-                eprintln!("merge:   {} -> {}", cur_score, new_score);
-                eprintln!("ws:      {:?}", ws);
-                cur_score = new_score;
-            } else {
-                // ロールバック
-                ws = _ws;
-                r = _r;
-            }
-        } else if p < 0.4 {
-            // 列iを2つの列に分割する
-            let i = rnd::gen_index(ws.len());
-
-            // 適当に分割する
-            // 比率をp:1-pになるように分ける
-            // NOTE: 比率を変えるとどうなる？
-            let ratio = rnd::gen_rangef(0.001, 0.999);
-            let a_w = (ws[i] as f64 * ratio).round() as i64;
-            let b_w = ws[i] - a_w;
-            if a_w < 1 || b_w < 1 {
-                continue;
-            }
-
-            let _ws = ws.clone();
-            let _r = r.clone();
-            for d in 0..input.D {
-                let rs = r[d].remove(i);
-                let mut a = vec![];
-                let mut b = vec![];
-                let mut a_h = 0;
-                let mut b_h = 0;
-                for i in rs {
-                    let s = input.A[d][i];
-                    // 高さが低い方に入れる
-                    let next_a_h = a_h + ceil_div(s, a_w);
-                    let next_b_h = b_h + ceil_div(s, b_w);
-                    if next_a_h < next_b_h {
-                        a.push(i);
-                        a_h = next_a_h;
-                    } else {
-                        b.push(i);
-                        b_h = next_b_h;
-                    }
-                }
-                r[d].push(a);
-                r[d].push(b);
-            }
-            ws.remove(i);
-            ws.push(a_w);
-            ws.push(b_w);
-
-            let new_score = eval(&ws, &r, input);
-            if new_score < cur_score {
-                eprintln!("split:   {} -> {}", cur_score, new_score);
-                eprintln!("ws:      {:?}", ws);
-                cur_score = new_score;
-            } else {
-                // ロールバック
-                ws = _ws;
-                r = _r;
-            }
-        } else if p < 0.6 {
-            // 列iの幅を列jに移す
-            let (i, j) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));
-            if i == j {
-                continue;
-            }
-            let ratio = rnd::gen_rangef(0.001, 0.999);
-            let mv_w = (ws[i] as f64 * ratio).round() as i64;
-            if ws[i] - mv_w < 1 {
-                continue;
-            }
-            let _ws = ws.clone();
-            let _r = r.clone();
-            ws[i] -= mv_w;
-            ws[j] += mv_w;
-            let new_score = eval(&ws, &r, input);
-            if new_score < cur_score {
-                eprintln!("move:    {} -> {}", cur_score, new_score);
-                eprintln!("ws:      {:?}", ws);
-                cur_score = new_score;
-            } else {
-                // ロールバック
-                ws = _ws;
-                r = _r;
-            }
-        } else if p < 0.8 {
+    for _ in 0..10000000 {
+        let p = rnd::nextf();
+        if p < 0.5 {
             // 領域を移動する
             let d = rnd::gen_index(input.D);
             let col1 = rnd::gen_index(ws.len());

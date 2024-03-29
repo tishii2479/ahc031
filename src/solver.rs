@@ -99,6 +99,447 @@ fn match_greedy(
     (match_count, groups, new_prev_rem)
 }
 
+pub struct Solver<'a> {
+    state: State,
+    input: &'a Input,
+}
+
+impl<'a> Solver<'a> {
+    pub fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, input: &Input) -> Solver {
+        Solver {
+            state: State::new(ws, r, input.W, input.D),
+            input,
+        }
+    }
+
+    pub fn solve(&mut self) -> Answer {
+        let mut total_cost = 0;
+
+        for d in 0..self.input.D {
+            // 事前計算
+            let prev_h: Vec<Vec<i64>> = (0..self.state.ws.len())
+                .map(|col| {
+                    self.state.node_idx[d][col]
+                        .iter()
+                        .map(|&i| self.state.trees[col].nodes[i].height)
+                        .collect()
+                })
+                .collect();
+            let prev_rem: Vec<Vec<Vec<i64>>> = (0..self.state.ws.len())
+                .map(|col| self.state.trees[col].gen_rem(&self.state.node_idx[d][col]))
+                .collect();
+
+            self.optimize_r(&prev_h, &prev_rem, d);
+
+            // 事後計算
+            for col in 0..self.state.ws.len() {
+                let next_h = self.state.r[d][col]
+                    .iter()
+                    .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
+                    .collect::<Vec<i64>>();
+                let (match_count, groups, _) =
+                    match_greedy(&prev_h[col], &prev_rem[col], &next_h, self.input.W);
+                let switch_count = if d == 0 {
+                    0
+                } else {
+                    next_h.len() + prev_h[col].len() - match_count * 2
+                };
+                total_cost += switch_count as i64 * self.state.ws[col];
+
+                let mut next_nodes = vec![];
+                for i in 0..groups.len() {
+                    let (prev_g, next_g, rem) = groups[i];
+                    let prev_nodes = &self.state.node_idx[d][col][prev_g.0..prev_g.1].to_vec();
+                    let next_h = &next_h[next_g.0..next_g.1].to_vec();
+                    next_nodes.extend(self.state.trees[col].connect(prev_nodes, &next_h, rem));
+                }
+                self.state.node_idx[d + 1].push(next_nodes);
+            }
+        }
+
+        let mut ans = Answer::new(self.input.D, self.input.N, total_cost);
+        let mut width = 0;
+        for col in 0..self.state.ws.len() {
+            let w = self.state.ws[col];
+            self.state.trees[col].propagate_rem();
+            for d in 0..self.input.D {
+                let mut height = 0;
+                for (i, &r_idx) in self.state.r[d][col].iter().enumerate() {
+                    let node_idx = self.state.node_idx[d + 1][col][i];
+                    let h = self.state.trees[col].nodes[node_idx].height;
+                    ans.p[d][r_idx] = (height, width, height + h, width + w);
+                    height += h;
+                }
+                assert_eq!(height, self.input.W, "{} {}", d, col);
+            }
+            width += w;
+        }
+
+        ans
+    }
+
+    /// TODO: d=0は余裕だけを評価する
+    fn optimize_r(&mut self, prev_h: &Vec<Vec<i64>>, prev_rem: &Vec<Vec<Vec<i64>>>, d: usize) {
+        let mut cur_score_col: Vec<i64> = (0..self.state.ws.len())
+            .map(|col| {
+                self.state
+                    .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input)
+            })
+            .collect();
+        let mut cur_score = cur_score_col.iter().sum::<i64>();
+
+        let iteration = 50000;
+        let start_temp: f64 = 100.;
+        let end_temp: f64 = 0.1;
+
+        eprintln!("start_cur_score: {}", cur_score);
+
+        for t in 0..iteration {
+            let progress = t as f64 / iteration as f64;
+            let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
+            let threshold = -cur_temp * rnd::nextf().ln();
+            let p = rnd::nextf();
+            if p < 0.5 {
+                // 列内1:1swap
+                let col = rnd::gen_index(self.state.ws.len());
+                let (i, j) = (
+                    rnd::gen_index(self.state.r[d][col].len()),
+                    rnd::gen_index(self.state.r[d][col].len()),
+                );
+                if i == j {
+                    continue;
+                }
+                self.state.r[d][col].swap(i, j);
+
+                let new_score_col =
+                    self.state
+                        .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input);
+                let score_diff = new_score_col - cur_score_col[col];
+                if (score_diff as f64) <= threshold {
+                    // eprintln!("swap-in-col: {} -> {}", cur_score, cur_score + score_diff);
+                    cur_score_col[col] = new_score_col;
+                    cur_score += score_diff;
+                } else {
+                    self.state.r[d][col].swap(i, j);
+                }
+            } else {
+                // 列間1:1swap
+                let (col1, col2) = (
+                    rnd::gen_index(self.state.ws.len()),
+                    rnd::gen_index(self.state.ws.len()),
+                );
+                if col1 == col2 {
+                    continue;
+                }
+                let (i1, i2) = (
+                    rnd::gen_index(self.state.r[d][col1].len()),
+                    rnd::gen_index(self.state.r[d][col2].len()),
+                );
+                (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
+                    (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
+
+                let new_score_col1 =
+                    self.state
+                        .eval_col(d, col1, &prev_h[col1], &prev_rem[col1], self.input);
+                let new_score_col2 =
+                    self.state
+                        .eval_col(d, col2, &prev_h[col2], &prev_rem[col2], self.input);
+                let score_diff =
+                    new_score_col1 + new_score_col2 - cur_score_col[col1] - cur_score_col[col2];
+
+                if (score_diff as f64) <= threshold {
+                    // eprintln!("swap-am-col: {} -> {}", cur_score, cur_score + score_diff);
+                    cur_score_col[col1] = new_score_col1;
+                    cur_score_col[col2] = new_score_col2;
+                    cur_score += score_diff;
+                } else {
+                    (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
+                        (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
+                }
+            }
+        }
+
+        eprintln!("end_cur_score: {}", cur_score);
+    }
+}
+
+struct State {
+    ws: Vec<i64>,
+    // r[d][col][i]
+    r: Vec<Vec<Vec<usize>>>,
+    // node_idx[d][col][i]
+    node_idx: Vec<Vec<Vec<usize>>>,
+    trees: Vec<StackTree>,
+}
+
+impl State {
+    fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, w: i64, d: usize) -> State {
+        let col_count = ws.len();
+        let mut state = State {
+            ws,
+            r,
+            trees: vec![StackTree::new(w); col_count],
+            node_idx: vec![vec![]; d + 1],
+        };
+        for col in 0..col_count {
+            state.node_idx[0].push(vec![state.trees[col].root_node]);
+        }
+        state
+    }
+
+    fn eval_col(
+        &self,
+        d: usize,
+        col: usize,
+        prev_h: &Vec<i64>,
+        prev_rem: &Vec<Vec<i64>>,
+        input: &Input,
+    ) -> i64 {
+        let next_h = self.r[d][col]
+            .iter()
+            .map(|&r_idx| ceil_div(input.A[d][r_idx], self.ws[col]))
+            .collect::<Vec<i64>>();
+
+        if next_h.iter().sum::<i64>() > input.W {
+            return 1 << 50;
+        }
+
+        let (match_count, _, _) = match_greedy(&prev_h, &prev_rem, &next_h, input.W);
+        let switch_count = prev_h.len() + next_h.len() - match_count * 2;
+
+        // TODO: タイブレーク時には、余裕の残り具合も足す
+        // TODO: 幅も考慮する
+        // let prev_rem = prev_rem.iter().map(|v| v.iter().sum::<i64>()).sum::<i64>();
+        // let next_rem = groups.iter().map(|g| g.2).sum::<i64>();
+        // let rem = prev_rem + next_rem;
+
+        switch_count as i64 * self.ws[col]
+    }
+}
+
+#[derive(Clone)]
+struct StackTree {
+    nodes: Vec<Node>,
+    root_node: usize,
+}
+
+impl StackTree {
+    fn new(w: i64) -> StackTree {
+        let mut tree = StackTree {
+            root_node: 0,
+            nodes: vec![],
+        };
+        tree.root_node = tree.new_node(0, w);
+        tree
+    }
+
+    fn new_node(&mut self, rem: i64, height: i64) -> usize {
+        let mut node = Node::new();
+        node.height = height;
+        node.rem = rem;
+        self.nodes.push(node);
+        self.nodes.len() - 1
+    }
+
+    fn connect(
+        &mut self,
+        prev_nodes: &Vec<usize>,
+        next_heights: &Vec<i64>,
+        rem: i64,
+    ) -> Vec<usize> {
+        let inter_node = self.new_node(rem, 0);
+        for &par_node in prev_nodes.iter() {
+            self.nodes[par_node].children.push(inter_node);
+            self.nodes[inter_node].parents.push(par_node);
+        }
+
+        let mut next_nodes = vec![];
+        for &h in next_heights.iter() {
+            let next_node = self.new_node(0, h);
+            self.nodes[inter_node].children.push(next_node);
+            self.nodes[next_node].parents.push(inter_node);
+            next_nodes.push(next_node);
+        }
+
+        self.backpropagate_rem(inter_node);
+
+        next_nodes
+    }
+
+    /// remを親のノードから取ってくる
+    /// 取ってきたら、経路のheightに足す
+    fn backpropagate_rem(&mut self, inter_node: usize) {
+        let prev_height_sum = self.nodes[inter_node]
+            .parents
+            .iter()
+            .map(|&i| self.nodes[i].height)
+            .sum::<i64>();
+        let next_height_sum = self.nodes[inter_node]
+            .children
+            .iter()
+            .map(|&i| self.nodes[i].height)
+            .sum::<i64>();
+
+        let mut need_rem = next_height_sum + self.nodes[inter_node].rem - prev_height_sum;
+
+        let mut q = vec![inter_node];
+        let mut seen = HashSet::new();
+        seen.insert(inter_node);
+        let mut rem_cand_node = vec![];
+        while let Some(v) = q.pop() {
+            if self.nodes[v].rem > 0 {
+                rem_cand_node.push((self.nodes[v].node_r, v, self.nodes[v].rem));
+            }
+            for &u in self.nodes[v].parents.iter() {
+                if !seen.insert(u) {
+                    continue;
+                }
+                q.push(u);
+            }
+        }
+
+        rem_cand_node.sort();
+        let mut use_rem_nodes = HashMap::new();
+        for (_, node_idx, rem) in rem_cand_node {
+            let use_rem = rem.min(need_rem);
+            use_rem_nodes.insert(node_idx, use_rem);
+            need_rem -= use_rem;
+            self.nodes[node_idx].rem -= use_rem;
+        }
+        assert_eq!(need_rem, 0);
+
+        let mut q = vec![inter_node];
+        let mut seen = HashSet::new();
+        self.back_dfs(&mut q, &mut seen, &mut use_rem_nodes);
+    }
+
+    // need_remをparentsから貰いに行く
+    // もらったら、経路上の全てのheightに足す
+    fn back_dfs(
+        &mut self,
+        q: &mut Vec<usize>,
+        seen: &mut HashSet<usize>,
+        use_rem_nodes: &HashMap<usize, i64>,
+    ) {
+        let v = *q.last().unwrap();
+        if let Some(&use_rem) = use_rem_nodes.get(&v) {
+            for &u in q.iter() {
+                if self.nodes[u].height > 0 {
+                    self.nodes[u].height += use_rem;
+                }
+            }
+        }
+        let par = self.nodes[v].parents.clone(); // TODO: remove
+        for &u in par.iter() {
+            if !seen.insert(u) {
+                continue;
+            }
+            q.push(u);
+            self.back_dfs(q, seen, use_rem_nodes);
+            q.pop();
+        }
+    }
+
+    /// remを最初の子孫のheightに渡す
+    /// 解を作成するとき用
+    fn propagate_rem(&mut self) {
+        let mut q = VecDeque::new();
+        q.push_back(self.root_node);
+        let mut seen = HashSet::new();
+        seen.insert(self.root_node);
+        while let Some(v) = q.pop_front() {
+            if self.nodes[v].children.len() > 0 {
+                let first_child = self.nodes[v].children[0];
+                self.nodes[first_child].height += self.nodes[v].rem;
+                self.nodes[first_child].rem += self.nodes[v].rem;
+                self.nodes[v].rem = 0;
+            }
+            for &u in self.nodes[v].children.iter() {
+                if !seen.insert(u) {
+                    continue;
+                }
+                q.push_back(u);
+            }
+        }
+    }
+
+    fn gen_rem(&mut self, prev_nodes: &Vec<usize>) -> Vec<Vec<i64>> {
+        // rem[i][j] := iから使い始められて、jまでには消費する必要がある余裕
+        let mut rem = vec![vec![0; prev_nodes.len()]; prev_nodes.len()];
+
+        // node_l、node_rをリセットする
+        let mut q = vec![self.root_node];
+        let mut seen = HashSet::new();
+        seen.insert(self.root_node);
+        while let Some(v) = q.pop() {
+            self.nodes[v].node_l = usize::MAX;
+            self.nodes[v].node_r = usize::MIN;
+            for &u in self.nodes[v].children.iter() {
+                if !seen.insert(u) {
+                    continue;
+                }
+                q.push(u);
+            }
+        }
+
+        // prev_nodesから昇って、node_l、node_rを設定する
+        for (i, &node_idx) in prev_nodes.iter().enumerate() {
+            let mut q = vec![node_idx];
+            let mut seen = HashSet::new();
+            seen.insert(node_idx);
+            while let Some(v) = q.pop() {
+                self.nodes[v].node_l = self.nodes[v].node_l.min(i);
+                self.nodes[v].node_r = self.nodes[v].node_r.max(i);
+                for &u in self.nodes[v].parents.iter() {
+                    if !seen.insert(u) {
+                        continue;
+                    }
+                    q.push(u);
+                }
+            }
+        }
+
+        // 余裕があるノードを全て拾い、remに保管する
+        let mut q = vec![self.root_node];
+        let mut seen = HashSet::new();
+        seen.insert(self.root_node);
+        while let Some(v) = q.pop() {
+            rem[self.nodes[v].node_l][self.nodes[v].node_r] += self.nodes[v].rem;
+            for &u in self.nodes[v].children.iter() {
+                if !seen.insert(u) {
+                    continue;
+                }
+                q.push(u);
+            }
+        }
+
+        rem
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Node {
+    parents: Vec<usize>,  // 親ノード
+    children: Vec<usize>, // 子ノード
+    rem: i64,             // 余裕
+    height: i64,          // 高さ
+    node_l: usize,        // 最初に使えるノード
+    node_r: usize,        // 最後に使えるノード
+}
+
+impl Node {
+    fn new() -> Node {
+        Node {
+            parents: vec![],
+            children: vec![],
+            rem: 0,
+            height: 0,
+            node_l: usize::MAX,
+            node_r: usize::MIN,
+        }
+    }
+}
+
 #[test]
 fn test_match_greedy() {
     fn create_rem_mat(len: usize, rem: Vec<(usize, usize, i64)>) -> Vec<Vec<i64>> {
@@ -333,224 +774,6 @@ fn test_match_greedy() {
     dbg!(&match_count, &groups, &new_prev_rem);
 }
 
-pub struct Solver<'a> {
-    state: State,
-    input: &'a Input,
-}
-
-impl<'a> Solver<'a> {
-    pub fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, input: &Input) -> Solver {
-        Solver {
-            state: State::new(ws, r, input.W, input.D),
-            input,
-        }
-    }
-
-    pub fn solve(&mut self) -> Answer {
-        let mut total_cost = 0;
-
-        for d in 0..self.input.D {
-            // 事前計算
-            let prev_h: Vec<Vec<i64>> = (0..self.state.ws.len())
-                .map(|col| {
-                    self.state.node_idx[d][col]
-                        .iter()
-                        .map(|&i| self.state.trees[col].nodes[i].height)
-                        .collect()
-                })
-                .collect();
-            let prev_rem: Vec<Vec<Vec<i64>>> = (0..self.state.ws.len())
-                .map(|col| self.state.trees[col].gen_rem(&self.state.node_idx[d][col]))
-                .collect();
-
-            self.optimize_r(&prev_h, &prev_rem, d);
-
-            // 事後計算
-            for col in 0..self.state.ws.len() {
-                let next_h = self.state.r[d][col]
-                    .iter()
-                    .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
-                    .collect::<Vec<i64>>();
-                let (match_count, groups, _) =
-                    match_greedy(&prev_h[col], &prev_rem[col], &next_h, self.input.W);
-                let switch_count = if d == 0 {
-                    0
-                } else {
-                    next_h.len() + prev_h[col].len() - match_count * 2
-                };
-                total_cost += switch_count as i64 * self.state.ws[col];
-
-                let mut next_nodes = vec![];
-                for i in 0..groups.len() {
-                    let (prev_g, next_g, rem) = groups[i];
-                    let prev_nodes = &self.state.node_idx[d][col][prev_g.0..prev_g.1].to_vec();
-                    let next_h = &next_h[next_g.0..next_g.1].to_vec();
-                    next_nodes.extend(self.state.trees[col].connect(prev_nodes, &next_h, rem));
-                }
-                self.state.node_idx[d + 1].push(next_nodes);
-            }
-        }
-
-        let mut ans = Answer::new(self.input.D, self.input.N, total_cost);
-        let mut width = 0;
-        for col in 0..self.state.ws.len() {
-            let w = self.state.ws[col];
-            self.state.trees[col].propagate_rem();
-            for d in 0..self.input.D {
-                let mut height = 0;
-                for (i, &r_idx) in self.state.r[d][col].iter().enumerate() {
-                    let node_idx = self.state.node_idx[d + 1][col][i];
-                    let h = self.state.trees[col].nodes[node_idx].height;
-                    ans.p[d][r_idx] = (height, width, height + h, width + w);
-                    height += h;
-                }
-                assert_eq!(height, self.input.W, "{} {}", d, col);
-            }
-            width += w;
-        }
-
-        ans
-    }
-
-    /// TODO: d=0は余裕だけを評価する
-    fn optimize_r(&mut self, prev_h: &Vec<Vec<i64>>, prev_rem: &Vec<Vec<Vec<i64>>>, d: usize) {
-        let mut cur_score_col: Vec<i64> = (0..self.state.ws.len())
-            .map(|col| {
-                self.state
-                    .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input)
-            })
-            .collect();
-        let mut cur_score = cur_score_col.iter().sum::<i64>();
-
-        let iteration = 50000;
-        let start_temp: f64 = 100.;
-        let end_temp: f64 = 0.1;
-
-        eprintln!("start_cur_score: {}", cur_score);
-
-        for t in 0..iteration {
-            let progress = t as f64 / iteration as f64;
-            let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
-            let threshold = -cur_temp * rnd::nextf().ln();
-            let p = rnd::nextf();
-            if p < 0.5 {
-                // 列内1:1swap
-                let col = rnd::gen_index(self.state.ws.len());
-                let (i, j) = (
-                    rnd::gen_index(self.state.r[d][col].len()),
-                    rnd::gen_index(self.state.r[d][col].len()),
-                );
-                if i == j {
-                    continue;
-                }
-                self.state.r[d][col].swap(i, j);
-
-                let new_score_col =
-                    self.state
-                        .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input);
-                let score_diff = new_score_col - cur_score_col[col];
-                if (score_diff as f64) <= threshold {
-                    // eprintln!("swap-in-col: {} -> {}", cur_score, cur_score + score_diff);
-                    cur_score_col[col] = new_score_col;
-                    cur_score += score_diff;
-                } else {
-                    self.state.r[d][col].swap(i, j);
-                }
-            } else {
-                // 列間1:1swap
-                let (col1, col2) = (
-                    rnd::gen_index(self.state.ws.len()),
-                    rnd::gen_index(self.state.ws.len()),
-                );
-                if col1 == col2 {
-                    continue;
-                }
-                let (i1, i2) = (
-                    rnd::gen_index(self.state.r[d][col1].len()),
-                    rnd::gen_index(self.state.r[d][col2].len()),
-                );
-                (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
-                    (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
-
-                let new_score_col1 =
-                    self.state
-                        .eval_col(d, col1, &prev_h[col1], &prev_rem[col1], self.input);
-                let new_score_col2 =
-                    self.state
-                        .eval_col(d, col2, &prev_h[col2], &prev_rem[col2], self.input);
-                let score_diff =
-                    new_score_col1 + new_score_col2 - cur_score_col[col1] - cur_score_col[col2];
-
-                if (score_diff as f64) <= threshold {
-                    // eprintln!("swap-am-col: {} -> {}", cur_score, cur_score + score_diff);
-                    cur_score_col[col1] = new_score_col1;
-                    cur_score_col[col2] = new_score_col2;
-                    cur_score += score_diff;
-                } else {
-                    (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
-                        (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
-                }
-            }
-        }
-
-        eprintln!("end_cur_score: {}", cur_score);
-    }
-}
-
-struct State {
-    ws: Vec<i64>,
-    // r[d][col][i]
-    r: Vec<Vec<Vec<usize>>>,
-    // node_idx[d][col][i]
-    node_idx: Vec<Vec<Vec<usize>>>,
-    trees: Vec<StackTree>,
-}
-
-impl State {
-    fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, w: i64, d: usize) -> State {
-        let col_count = ws.len();
-        let mut state = State {
-            ws,
-            r,
-            trees: vec![StackTree::new(w); col_count],
-            node_idx: vec![vec![]; d + 1],
-        };
-        for col in 0..col_count {
-            state.node_idx[0].push(vec![state.trees[col].root_node]);
-        }
-        state
-    }
-
-    fn eval_col(
-        &self,
-        d: usize,
-        col: usize,
-        prev_h: &Vec<i64>,
-        prev_rem: &Vec<Vec<i64>>,
-        input: &Input,
-    ) -> i64 {
-        let next_h = self.r[d][col]
-            .iter()
-            .map(|&r_idx| ceil_div(input.A[d][r_idx], self.ws[col]))
-            .collect::<Vec<i64>>();
-
-        if next_h.iter().sum::<i64>() > input.W {
-            return 1 << 50;
-        }
-
-        let (match_count, _, _) = match_greedy(&prev_h, &prev_rem, &next_h, input.W);
-        let switch_count = prev_h.len() + next_h.len() - match_count * 2;
-
-        // TODO: タイブレーク時には、余裕の残り具合も足す
-        // TODO: 幅も考慮する
-        // let prev_rem = prev_rem.iter().map(|v| v.iter().sum::<i64>()).sum::<i64>();
-        // let next_rem = groups.iter().map(|g| g.2).sum::<i64>();
-        // let rem = prev_rem + next_rem;
-
-        switch_count as i64 * self.ws[col]
-    }
-}
-
 #[test]
 fn test_stacktree() {
     const W: i64 = 1000;
@@ -591,227 +814,4 @@ fn test_stacktree() {
     }
 
     eprintln!("{}", score);
-}
-
-#[derive(Clone)]
-struct StackTree {
-    nodes: Vec<Node>,
-    root_node: usize,
-}
-
-impl StackTree {
-    fn new(w: i64) -> StackTree {
-        let mut tree = StackTree {
-            root_node: 0,
-            nodes: vec![],
-        };
-        tree.root_node = tree.new_node(0, w);
-        tree
-    }
-
-    fn new_node(&mut self, rem: i64, height: i64) -> usize {
-        let mut node = Node::new();
-        node.height = height;
-        node.rem = rem;
-        self.nodes.push(node);
-        self.nodes.len() - 1
-    }
-
-    fn connect(
-        &mut self,
-        prev_nodes: &Vec<usize>,
-        next_heights: &Vec<i64>,
-        rem: i64,
-    ) -> Vec<usize> {
-        let inter_node = self.new_node(rem, 0);
-        for &par_node in prev_nodes.iter() {
-            self.nodes[par_node].children.push(inter_node);
-            self.nodes[inter_node].parents.push(par_node);
-        }
-
-        let mut next_nodes = vec![];
-        for &h in next_heights.iter() {
-            let next_node = self.new_node(0, h);
-            self.nodes[inter_node].children.push(next_node);
-            self.nodes[next_node].parents.push(inter_node);
-            next_nodes.push(next_node);
-        }
-
-        self.backpropagate_rem(inter_node);
-
-        next_nodes
-    }
-
-    /// remを親のノードから取ってくる
-    /// 取ってきたら、経路のheightに足す
-    fn backpropagate_rem(&mut self, inter_node: usize) {
-        let prev_height_sum = self.nodes[inter_node]
-            .parents
-            .iter()
-            .map(|&i| self.nodes[i].height)
-            .sum::<i64>();
-        let next_height_sum = self.nodes[inter_node]
-            .children
-            .iter()
-            .map(|&i| self.nodes[i].height)
-            .sum::<i64>();
-
-        let mut need_rem = next_height_sum + self.nodes[inter_node].rem - prev_height_sum;
-
-        let mut q = vec![inter_node];
-        let mut seen = HashSet::new();
-        seen.insert(inter_node);
-        let mut rem_cand_node = vec![];
-        while let Some(v) = q.pop() {
-            if self.nodes[v].rem > 0 {
-                rem_cand_node.push((self.nodes[v].node_r, v, self.nodes[v].rem));
-            }
-            for &u in self.nodes[v].parents.iter() {
-                if !seen.insert(u) {
-                    continue;
-                }
-                q.push(u);
-            }
-        }
-
-        rem_cand_node.sort();
-        let mut use_rem_nodes = HashMap::new();
-        for (_, node_idx, rem) in rem_cand_node {
-            let use_rem = rem.min(need_rem);
-            use_rem_nodes.insert(node_idx, use_rem);
-            need_rem -= use_rem;
-            self.nodes[node_idx].rem -= use_rem;
-        }
-        assert_eq!(need_rem, 0);
-
-        let mut q = vec![inter_node];
-        let mut seen = HashSet::new();
-        self.back_dfs(&mut q, &mut seen, &mut use_rem_nodes);
-    }
-
-    // need_remをparentsから貰いに行く
-    // もらったら、経路上の全てのheightに足す
-    fn back_dfs(
-        &mut self,
-        q: &mut Vec<usize>,
-        seen: &mut HashSet<usize>,
-        use_rem_nodes: &HashMap<usize, i64>,
-    ) {
-        let v = *q.last().unwrap();
-        if let Some(&use_rem) = use_rem_nodes.get(&v) {
-            for &u in q.iter() {
-                if self.nodes[u].height > 0 {
-                    self.nodes[u].height += use_rem;
-                }
-            }
-        }
-        let par = self.nodes[v].parents.clone(); // TODO: remove
-        for &u in par.iter() {
-            if !seen.insert(u) {
-                continue;
-            }
-            q.push(u);
-            self.back_dfs(q, seen, use_rem_nodes);
-            q.pop();
-        }
-    }
-
-    /// remを最初の子孫のheightに渡す
-    /// 解を作成するとき用
-    fn propagate_rem(&mut self) {
-        let mut q = VecDeque::new();
-        q.push_back(self.root_node);
-        let mut seen = HashSet::new();
-        seen.insert(self.root_node);
-        while let Some(v) = q.pop_front() {
-            if self.nodes[v].children.len() > 0 {
-                let first_child = self.nodes[v].children[0];
-                self.nodes[first_child].height += self.nodes[v].rem;
-                self.nodes[first_child].rem += self.nodes[v].rem;
-                self.nodes[v].rem = 0;
-            }
-            for &u in self.nodes[v].children.iter() {
-                if !seen.insert(u) {
-                    continue;
-                }
-                q.push_back(u);
-            }
-        }
-    }
-
-    fn gen_rem(&mut self, prev_nodes: &Vec<usize>) -> Vec<Vec<i64>> {
-        // rem[i][j] := iから使い始められて、jまでには消費する必要がある余裕
-        let mut rem = vec![vec![0; prev_nodes.len()]; prev_nodes.len()];
-
-        // node_l、node_rをリセットする
-        let mut q = vec![self.root_node];
-        let mut seen = HashSet::new();
-        seen.insert(self.root_node);
-        while let Some(v) = q.pop() {
-            self.nodes[v].node_l = usize::MAX;
-            self.nodes[v].node_r = usize::MIN;
-            for &u in self.nodes[v].children.iter() {
-                if !seen.insert(u) {
-                    continue;
-                }
-                q.push(u);
-            }
-        }
-
-        // prev_nodesから昇って、node_l、node_rを設定する
-        for (i, &node_idx) in prev_nodes.iter().enumerate() {
-            let mut q = vec![node_idx];
-            let mut seen = HashSet::new();
-            seen.insert(node_idx);
-            while let Some(v) = q.pop() {
-                self.nodes[v].node_l = self.nodes[v].node_l.min(i);
-                self.nodes[v].node_r = self.nodes[v].node_r.max(i);
-                for &u in self.nodes[v].parents.iter() {
-                    if !seen.insert(u) {
-                        continue;
-                    }
-                    q.push(u);
-                }
-            }
-        }
-
-        // 余裕があるノードを全て拾い、remに保管する
-        let mut q = vec![self.root_node];
-        let mut seen = HashSet::new();
-        seen.insert(self.root_node);
-        while let Some(v) = q.pop() {
-            rem[self.nodes[v].node_l][self.nodes[v].node_r] += self.nodes[v].rem;
-            for &u in self.nodes[v].children.iter() {
-                if !seen.insert(u) {
-                    continue;
-                }
-                q.push(u);
-            }
-        }
-
-        rem
-    }
-}
-
-#[derive(Clone, Debug)]
-struct Node {
-    parents: Vec<usize>,  // 親ノード
-    children: Vec<usize>, // 子ノード
-    rem: i64,             // 余裕
-    height: i64,          // 高さ
-    node_l: usize,        // 最初に使えるノード
-    node_r: usize,        // 最後に使えるノード
-}
-
-impl Node {
-    fn new() -> Node {
-        Node {
-            parents: vec![],
-            children: vec![],
-            rem: 0,
-            height: 0,
-            node_l: usize::MAX,
-            node_r: usize::MIN,
-        }
-    }
 }
