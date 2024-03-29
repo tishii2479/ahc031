@@ -224,7 +224,7 @@ impl<'a> Solver<'a> {
             .collect();
         let mut cur_score = cur_score_col.iter().sum::<i64>();
 
-        let iteration = 50000;
+        let iteration = 10000;
         let start_temp: f64 = 100.;
         let end_temp: f64 = 0.1;
 

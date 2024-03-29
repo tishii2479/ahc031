@@ -145,7 +145,7 @@ class Runner:
         database_df = (
             database_df.groupby(Col.SOLVER_VERSION)[[Col.RELATIVE_SCORE, Col.SCORE]]
             .mean()
-            .sort_values(by=Col.RELATIVE_SCORE, ascending=False)
+            .sort_values(by=Col.RELATIVE_SCORE, ascending=not self.is_maximize)
         )
         self.logger.info(database_df[:top_k])
 
