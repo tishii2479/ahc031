@@ -109,7 +109,10 @@ fn get_squeezed_height(r_idx: &Vec<usize>, d: usize, w: i64, input: &Input) -> (
     let required_height = heights.iter().sum::<i64>();
     let mut over_height = (required_height - input.W).max(0);
     let mut space_for_r_idx = (0..r_idx.len())
-        .map(|i| (input.A[d][r_idx[i]] % input.W, i))
+        .map(|i| {
+            let d = input.A[d][r_idx[i]] % w;
+            (if d == 0 { w } else { d }, i)
+        })
         .collect::<Vec<(i64, usize)>>();
     space_for_r_idx.sort();
 
@@ -121,7 +124,7 @@ fn get_squeezed_height(r_idx: &Vec<usize>, d: usize, w: i64, input: &Input) -> (
             heights[idx] -= 1;
             over_height -= 1;
         }
-        space_for_r_idx.push((input.W, idx));
+        space_for_r_idx.push((w, idx));
     }
 
     (heights, exceed_cost * EXCEED_COST)
