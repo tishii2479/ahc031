@@ -73,7 +73,7 @@ fn eval(ws: &Vec<i64>, r: &Vec<Vec<Vec<usize>>>, input: &Input) -> i64 {
 }
 
 fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
-    let mut ws = vec![200; 5];
+    let mut ws = vec![300, 300, 200, 200];
 
     // 初期状態の作成
     let mut r = best_fit(&ws, input);

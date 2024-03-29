@@ -1,6 +1,7 @@
 use crate::util::*;
 use proconio::input;
 
+pub const EXCEED_COST: i64 = 100;
 pub const TIME_LIMIT: f64 = 2.9;
 
 #[allow(non_snake_case)]

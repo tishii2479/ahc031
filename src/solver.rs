@@ -99,6 +99,34 @@ fn match_greedy(
     (match_count, groups, new_prev_rem)
 }
 
+fn get_squeezed_height(r_idx: &Vec<usize>, d: usize, w: i64, input: &Input) -> (Vec<i64>, i64) {
+    let mut heights = r_idx
+        .iter()
+        .map(|&r_idx| ceil_div(input.A[d][r_idx], w))
+        .collect::<Vec<i64>>();
+
+    // 超過してしまう場合は、縮めることで損をしない領域（余りが大きい領域）を縮める
+    let required_height = heights.iter().sum::<i64>();
+    let mut over_height = (required_height - input.W).max(0);
+    let mut space_for_r_idx = (0..r_idx.len())
+        .map(|i| (input.A[d][r_idx[i]] % input.W, i))
+        .collect::<Vec<(i64, usize)>>();
+    space_for_r_idx.sort();
+
+    let mut exceed_cost = 0;
+    while over_height > 0 {
+        let (space, idx) = space_for_r_idx.remove(0);
+        if heights[idx] > 1 {
+            exceed_cost += space;
+            heights[idx] -= 1;
+            over_height -= 1;
+        }
+        space_for_r_idx.push((input.W, idx));
+    }
+
+    (heights, exceed_cost * EXCEED_COST)
+}
+
 pub struct Solver<'a> {
     state: State,
     input: &'a Input,
@@ -133,10 +161,8 @@ impl<'a> Solver<'a> {
 
             // 事後計算
             for col in 0..self.state.ws.len() {
-                let next_h = self.state.r[d][col]
-                    .iter()
-                    .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
-                    .collect::<Vec<i64>>();
+                let (next_h, exceed_cost) =
+                    get_squeezed_height(&self.state.r[d][col], d, self.state.ws[col], self.input);
                 let (match_count, groups, _) =
                     match_greedy(&prev_h[col], &prev_rem[col], &next_h, self.input.W);
                 let switch_count = if d == 0 {
@@ -145,6 +171,7 @@ impl<'a> Solver<'a> {
                     next_h.len() + prev_h[col].len() - match_count * 2
                 };
                 total_cost += switch_count as i64 * self.state.ws[col];
+                total_cost += exceed_cost;
 
                 let mut next_nodes = vec![];
                 for i in 0..groups.len() {
@@ -157,11 +184,17 @@ impl<'a> Solver<'a> {
             }
         }
 
+        self.create_answer(total_cost)
+    }
+
+    fn create_answer(&mut self, total_cost: i64) -> Answer {
         let mut ans = Answer::new(self.input.D, self.input.N, total_cost);
         let mut width = 0;
+
         for col in 0..self.state.ws.len() {
             let w = self.state.ws[col];
             self.state.trees[col].propagate_rem();
+
             for d in 0..self.input.D {
                 let mut height = 0;
                 for (i, &r_idx) in self.state.r[d][col].iter().enumerate() {
@@ -295,11 +328,7 @@ impl State {
         prev_rem: &Vec<Vec<i64>>,
         input: &Input,
     ) -> i64 {
-        let next_h = self.r[d][col]
-            .iter()
-            .map(|&r_idx| ceil_div(input.A[d][r_idx], self.ws[col]))
-            .collect::<Vec<i64>>();
-
+        let (next_h, exceed_cost) = get_squeezed_height(&self.r[d][col], d, self.ws[col], input);
         if next_h.iter().sum::<i64>() > input.W {
             return 1 << 50;
         }
@@ -313,7 +342,7 @@ impl State {
         // let next_rem = groups.iter().map(|g| g.2).sum::<i64>();
         // let rem = prev_rem + next_rem;
 
-        switch_count as i64 * self.ws[col]
+        switch_count as i64 * self.ws[col] + exceed_cost
     }
 }
 
