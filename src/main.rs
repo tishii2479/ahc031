@@ -6,7 +6,7 @@ use crate::def::*;
 use crate::solver::*;
 use crate::util::*;
 
-const FIRST_TIME_LIMIT: f64 = 1.;
+const FIRST_TIME_LIMIT: f64 = 0.5;
 
 fn best_fit(ws: &Vec<i64>, input: &Input) -> Vec<Vec<Vec<usize>>> {
     let mut r = vec![vec![vec![]; ws.len()]; input.D];
@@ -157,7 +157,7 @@ fn main() {
     let input = Input::read_input();
 
     let mut start_cands = vec![];
-    for _ in 0..100 {
+    while time::elapsed_seconds() < FIRST_TIME_LIMIT {
         let col = rnd::gen_range(1, 10);
         let mut bins = (0..col - 1)
             .map(|_| rnd::gen_range(1, input.W as usize) as i64)

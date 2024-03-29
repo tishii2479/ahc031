@@ -159,7 +159,7 @@ impl<'a> Solver<'a> {
             // 事後計算
             for col in 0..self.state.ws.len() {
                 let r_idx = &self.state.r[d][col];
-                let mut heights = r_idx
+                let heights = r_idx
                     .iter()
                     .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
                     .collect::<Vec<i64>>();
@@ -221,15 +221,13 @@ impl<'a> Solver<'a> {
                     .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input, true)
             })
             .collect();
-        let mut cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
+        let mut _cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
 
         let iteration = 100000;
-        let start_temp: f64 = 100.;
-        let end_temp: f64 = 0.1;
+        let start_temp: f64 = 1e2;
+        let end_temp: f64 = 1e-1;
 
-        eprintln!("start_cur_score: {}", cur_score);
-        let total = time::elapsed_seconds();
-        let mut a = 0.;
+        // eprintln!("start_cur_score: {}", cur_score);
 
         for t in 0..iteration {
             let progress = t as f64 / iteration as f64;
@@ -267,7 +265,7 @@ impl<'a> Solver<'a> {
                     //     cur_score + score_diff
                     // );
                     cur_score_col[col] = new_score_col;
-                    cur_score += score_diff;
+                    _cur_score += score_diff;
                 } else {
                     self.state.r[d][col].swap(i, j);
                 }
@@ -319,17 +317,13 @@ impl<'a> Solver<'a> {
                     // );
                     cur_score_col[col1] = new_score_col1;
                     cur_score_col[col2] = new_score_col2;
-                    cur_score += score_diff;
+                    _cur_score += score_diff;
                 } else {
                     (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
                         (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
                 }
             }
         }
-
-        let total = time::elapsed_seconds() - total;
-        eprintln!("a / total: {:.5} / {:.5}", a, total);
-        eprintln!("end_cur_score: {}", cur_score);
     }
 }
 
