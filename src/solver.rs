@@ -235,7 +235,7 @@ impl<'a> Solver<'a> {
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
 
-            if p < 0.5 {
+            if p < 0.3 {
                 // 列内1:1swap
                 let col = rnd::gen_index(self.state.ws.len());
                 let (i, j) = (
@@ -269,7 +269,7 @@ impl<'a> Solver<'a> {
                 } else {
                     self.state.r[d][col].swap(i, j);
                 }
-            } else {
+            } else if p < 0.7 {
                 // 列間1:1swap
                 let (col1, col2) = (
                     rnd::gen_index(self.state.ws.len()),
@@ -321,6 +321,78 @@ impl<'a> Solver<'a> {
                 } else {
                     (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
                         (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
+                }
+            } else {
+                // 列間1:2swap
+                let (mut col1, mut col2) = (
+                    rnd::gen_index(self.state.ws.len()),
+                    rnd::gen_index(self.state.ws.len()),
+                );
+                if col1 == col2 {
+                    continue;
+                }
+                let (mut i1, mut i2) = (
+                    rnd::gen_index(self.state.r[d][col1].len()),
+                    rnd::gen_index(self.state.r[d][col2].len()),
+                );
+
+                // 低い方に足すために、col1 > col2にする
+                if self.input.A[d][self.state.r[d][col1][i1]]
+                    <= self.input.A[d][self.state.r[d][col2][i2]]
+                {
+                    (col1, col2) = (col2, col1);
+                    (i1, i2) = (i2, i1);
+                }
+                if !(i2 + 1 < self.state.r[d][col2].len()) {
+                    continue;
+                }
+                let r1 = self.state.r[d][col1].remove(i1);
+                let r21 = self.state.r[d][col2].remove(i2);
+                let r22 = self.state.r[d][col2].remove(i2);
+                self.state.r[d][col1].insert(i1, r22);
+                self.state.r[d][col1].insert(i1, r21);
+                self.state.r[d][col2].insert(i2, r1);
+
+                let new_score_col1 = self.state.eval_col(
+                    d,
+                    col1,
+                    &prev_h[col1],
+                    &prev_rem[col1],
+                    self.input,
+                    cur_score_col[col1].1 > 0,
+                );
+                let new_score_col2 = self.state.eval_col(
+                    d,
+                    col2,
+                    &prev_h[col2],
+                    &prev_rem[col2],
+                    self.input,
+                    cur_score_col[col2].1 > 0,
+                );
+                let score_diff =
+                    new_score_col1.0 + new_score_col1.1 + new_score_col2.0 + new_score_col2.1
+                        - cur_score_col[col1].0
+                        - cur_score_col[col1].1
+                        - cur_score_col[col2].0
+                        - cur_score_col[col2].1;
+
+                if (score_diff as f64) <= threshold {
+                    // eprintln!(
+                    //     "[{:5}] swap-am-col: {} -> {}",
+                    //     t,
+                    //     cur_score,
+                    //     cur_score + score_diff
+                    // );
+                    cur_score_col[col1] = new_score_col1;
+                    cur_score_col[col2] = new_score_col2;
+                    _cur_score += score_diff;
+                } else {
+                    self.state.r[d][col1].remove(i1);
+                    self.state.r[d][col1].remove(i1);
+                    self.state.r[d][col2].remove(i2);
+                    self.state.r[d][col1].insert(i1, r1);
+                    self.state.r[d][col2].insert(i2, r22);
+                    self.state.r[d][col2].insert(i2, r21);
                 }
             }
         }
