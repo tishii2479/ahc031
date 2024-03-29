@@ -9,7 +9,7 @@ use crate::util::*;
 const FIRST_TIME_LIMIT: f64 = 1.;
 
 fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
-    let mut ws = vec![1000; 1];
+    let mut ws = vec![200; 5];
     let mut r = vec![vec![vec![]; ws.len()]; input.D];
 
     // 初期状態の作成
@@ -57,7 +57,7 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
                 height += ceil_div(input.A[d][i], ws[col]);
             }
             if height > input.W {
-                score += (height - input.W) * ws[col] * 100000;
+                score += (height - input.W) * ws[col] * 1000;
             } else if rs.len() > 0 {
                 // 含まれていない列はスコアに加算しない
                 score -= (input.W - height) * ws[col];
@@ -79,8 +79,13 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
     eprintln!("cur_score    = {}", cur_score);
 
     // while time::elapsed_seconds() < FIRST_TIME_LIMIT {
-    for _ in 0..100000 {
-        let p = rnd::nextf();
+    for t in 0..10000000 {
+        let mut p = rnd::nextf();
+        if t < 0 {
+            p *= 0.6;
+        } else {
+            p = p * 0.4 + 0.6;
+        }
         if p < 0.2 {
             // 列iを列jにマージする
             let (i, j) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));
@@ -113,7 +118,7 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
             // 適当に分割する
             // 比率をp:1-pになるように分ける
             // NOTE: 比率を変えるとどうなる？
-            let ratio = rnd::gen_rangef(0.01, 0.99);
+            let ratio = rnd::gen_rangef(0.001, 0.999);
             let a_w = (ws[i] as f64 * ratio).round() as i64;
             let b_w = ws[i] - a_w;
             if a_w < 1 || b_w < 1 {
@@ -164,7 +169,7 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
             if i == j {
                 continue;
             }
-            let ratio = rnd::gen_rangef(0.5, 0.99);
+            let ratio = rnd::gen_rangef(0.001, 0.999);
             let mv_w = (ws[i] as f64 * ratio).round() as i64;
             if ws[i] - mv_w < 1 {
                 continue;
@@ -222,7 +227,7 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
             r[d][col1].push(r2);
             let new_score = cur_score + eval_d(d, &ws, &r, input) - cur_eval_d;
             if new_score < cur_score {
-                // eprintln!("mv_r:    {} -> {}", cur_score, new_score);
+                // eprintln!("sw_r:    {} -> {}", cur_score, new_score);
                 // eprintln!("ws:      {:?}", ws);
                 cur_score = new_score;
             } else {
@@ -240,22 +245,26 @@ fn create_col_and_initial_r(input: &Input) -> (Vec<i64>, Vec<Vec<Vec<usize>>>) {
     eprintln!("iteration:   {}", iteration);
     eprintln!("score:       {}", eval(&ws, &r, input));
     eprintln!("ws:          {:?}", ws);
+    eprintln!("elapsed:     {:?}", time::elapsed_seconds());
+
+    for d in 0..input.D {
+        let mut height = vec![0; ws.len()];
+        for col in 0..ws.len() {
+            for &r_idx in r[d][col].iter() {
+                height[col] += ceil_div(input.A[d][r_idx], ws[col]);
+            }
+        }
+        eprintln!("height:  {:?}", height);
+    }
 
     (ws, r)
-}
-
-fn solve(input: &Input) -> Answer {
-    let (ws, r) = create_col_and_initial_r(input);
-
-    eprintln!("elapsed:   {:.4}", time::elapsed_seconds());
-    let mut solver = Solver::new(ws.clone(), r.clone(), input);
-    let ans = solver.solve();
-    ans
 }
 
 fn main() {
     time::start_clock();
     let input = Input::read_input();
-    let ans = solve(&input);
+    let (ws, r) = create_col_and_initial_r(&input);
+    let mut solver = Solver::new(ws.clone(), r.clone(), &input);
+    let ans = solver.solve();
     ans.output();
 }
