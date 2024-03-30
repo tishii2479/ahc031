@@ -220,12 +220,12 @@ impl<'a> Solver<'a> {
         }
     }
 
-    pub fn solve(&mut self) -> Answer {
+    pub fn solve(&mut self, time_limit: f64) -> Answer {
         let mut total_cost = 0;
 
         for d in 0..self.input.D {
             self.state.setup_prev_h_rem(d);
-            self.optimize_r(d);
+            self.optimize_r(d, time_limit);
 
             total_cost += self.state.to_next_d(d, self.input);
         }
@@ -233,50 +233,27 @@ impl<'a> Solver<'a> {
         self.create_answer(total_cost)
     }
 
-    fn create_answer(&mut self, total_cost: i64) -> Answer {
-        let mut ans = Answer::new(self.input.D, self.input.N, total_cost);
-        let mut width = 0;
-
-        for col in 0..self.state.ws.len() {
-            let w = self.state.ws[col];
-            self.state.graphs[col].propagate_rem();
-
-            for d in 0..self.input.D {
-                let mut height = 0;
-                for (i, &r_idx) in self.state.r[d][col].iter().enumerate() {
-                    let node_idx = self.state.node_idx[d + 1][col][i];
-                    let h = self.state.graphs[col].nodes[node_idx].height;
-                    ans.p[d][r_idx] = (height, width, height + h, width + w);
-                    height += h;
-                }
-                assert_eq!(height, self.input.W, "{} {}", d, col);
-            }
-            width += w;
-        }
-
-        ans
-    }
-
     /// TODO: d=0は余裕だけを評価する
-    fn optimize_r(&mut self, d: usize) {
+    fn optimize_r(&mut self, d: usize, time_limit: f64) {
         let mut cur_score_col: Vec<(i64, i64)> = (0..self.state.ws.len())
             .map(|col| self.state.eval_col(d, col, self.input, true))
             .collect();
         let mut _cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
 
-        let start_temp: f64 = 1e2; // :param
-        let end_temp: f64 = 1e-1; // :param
+        let start_temp: f64 = 1e3; // :param
+        let end_temp: f64 = 1e0; // :param
 
         let start_time = time::elapsed_seconds();
-        let duration = ((TIME_LIMIT - start_time) / (self.input.D - d) as f64).max(1e-3);
+        let duration = ((time_limit - start_time) / (self.input.D - d) as f64).max(1e-3);
         let end_time = start_time + duration;
 
+        let mut iteration = 0;
         let mut adapt_in_shuf = 0;
         let mut adapt_in_swap = 0;
         let mut adapt_tr_move = 0;
         let mut adapt_tr_swap = 0;
 
-        let mut action_ratio = vec![0.2, 0.2, 0.2, 0.4];
+        let mut action_ratio = vec![0.05, 0.05, 0.4, 0.5];
         for i in 0..action_ratio.len() - 1 {
             action_ratio[i + 1] += action_ratio[i];
         }
@@ -454,11 +431,38 @@ impl<'a> Solver<'a> {
                     }
                 }
             }
+            iteration += 1;
         }
+
+        eprintln!("duration:    {:.6}", duration);
+        eprintln!("iteration:   {}", iteration);
         eprintln!("in-shuf:     {}", adapt_in_shuf);
         eprintln!("in-swap:     {}", adapt_in_swap);
         eprintln!("tr-move:     {}", adapt_tr_move);
         eprintln!("tr-swap:     {}", adapt_tr_swap);
+    }
+
+    fn create_answer(&mut self, total_cost: i64) -> Answer {
+        let mut ans = Answer::new(self.input.D, self.input.N, total_cost);
+        let mut width = 0;
+
+        for col in 0..self.state.ws.len() {
+            let w = self.state.ws[col];
+            self.state.graphs[col].propagate_rem();
+
+            for d in 0..self.input.D {
+                let mut height = 0;
+                for (i, &r_idx) in self.state.r[d][col].iter().enumerate() {
+                    let node_idx = self.state.node_idx[d + 1][col][i];
+                    let h = self.state.graphs[col].nodes[node_idx].height;
+                    ans.p[d][r_idx] = (height, width, height + h, width + w);
+                    height += h;
+                }
+            }
+            width += w;
+        }
+
+        ans
     }
 }
 

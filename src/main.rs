@@ -239,11 +239,21 @@ fn main() {
     time::start_clock();
     let input = Input::read_input();
     let start_cands = optimize_start_cands(&input);
+    let start_count = 1;
+    eprintln!("start-count: {}", start_count);
 
-    let (_, ws, r) = start_cands[0].clone();
-    eprintln!("ws({}): {:?}", ws.len(), ws);
+    let mut answers = vec![];
+    for i in 0..start_count {
+        let (_, ws, r) = start_cands[i].clone();
+        eprintln!("ws({}): {:?}", ws.len(), ws);
 
-    let mut solver = Solver::new(ws, r, &input);
-    let ans = solver.solve();
-    ans.output();
+        let mut solver = Solver::new(ws, r, &input);
+        let start_time = time::elapsed_seconds();
+        let time_limit = (TIME_LIMIT - start_time) / (start_count - i) as f64 + start_time;
+        let ans = solver.solve(time_limit);
+        eprintln!("score: {:7}", ans.score);
+        answers.push(ans);
+    }
+    let best_ans = answers.iter().min_by(|a, b| a.score.cmp(&b.score)).unwrap();
+    best_ans.output();
 }
