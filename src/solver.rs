@@ -96,6 +96,9 @@ fn match_greedy_fast(
     w: i64,
     prev_pickup_rems: &mut Vec<i64>,
 ) -> usize {
+    if prev_h.len() == 1 || next_h.len() == 1 {
+        return 1;
+    }
     let mut match_count = 0;
     for i in 0..prev_h.len() {
         prev_pickup_rems[i] = 0;
@@ -134,11 +137,11 @@ fn match_greedy_fast(
         }
 
         // 片方が進んでいなかったら、次に進める
-        if prev_l == prev_r || next_l == next_r {
-            continue;
-        }
         // 片方が最後まで来ていたら、両方最後まで進める
-        if (prev_r == prev_h.len() && next_r < next_h.len())
+
+        if prev_l == prev_r
+            || next_l == next_r
+            || (prev_r == prev_h.len() && next_r < next_h.len())
             || (prev_r < prev_h.len() && next_r == next_h.len())
         {
             continue;
@@ -171,7 +174,7 @@ fn match_greedy_fast(
     match_count
 }
 
-fn get_squeezed_height(
+fn to_squeezed_height(
     mut heights: Vec<i64>,
     r_idx: &Vec<usize>,
     d: usize,
@@ -244,7 +247,7 @@ impl<'a> Solver<'a> {
                     .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
                     .collect::<Vec<i64>>();
                 let (next_h, exceed_cost) =
-                    get_squeezed_height(heights, &r_idx, d, self.state.ws[col], self.input);
+                    to_squeezed_height(heights, &r_idx, d, self.state.ws[col], self.input);
                 let (match_count, groups, _) =
                     match_greedy(&prev_h[col], &prev_rem[col], &next_h, self.input.W);
                 let switch_count = if d == 0 {
@@ -310,6 +313,11 @@ impl<'a> Solver<'a> {
 
         let start_temp: f64 = 1e2; // :param
         let end_temp: f64 = 1e-1; // :param
+
+        // TODO: 初期解を作る
+        for col in 0..self.state.ws.len() {
+            let a = &self.state.r[d][col];
+        }
 
         let start_time = time::elapsed_seconds();
         let duration = ((TIME_LIMIT - start_time) / (self.input.D - d) as f64).max(1e-3);
@@ -513,7 +521,7 @@ impl State {
             return (0, 1 << 40);
         }
         let (next_h, exceed_cost) =
-            get_squeezed_height(heights, &self.r[d][col], d, self.ws[col], input);
+            to_squeezed_height(heights, &self.r[d][col], d, self.ws[col], input);
         let match_count =
             match_greedy_fast(&prev_h, &prev_rem, &next_h, input.W, &mut self.shared_v);
         let switch_count = prev_h.len() + next_h.len() - match_count * 2;

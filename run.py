@@ -93,22 +93,23 @@ class Runner:
     ) -> pd.DataFrame:
         self.logger.info(f"Evaluate: {self.solver_version}")
         df = self.read_database_df(ignore_solver_prefix=ignore_solver_prefix)
-        # if benchmark_solver_version is not None:
-        #     df = pd.merge(
-        #         df[df.solver_version == self.solver_version],
-        #         df[df.solver_version == benchmark_solver_version][
-        #             [Col.INPUT_FILE, Col.SCORE, Col.RELATIVE_SCORE]
-        #         ],
-        #         how="left",
-        #         on=Col.INPUT_FILE,
-        #         suffixes=["", "_bench"],
-        #     )
-        #     df[Col.RELATIVE_SCORE] = (
-        #         df[Col.RELATIVE_SCORE] - df[f"{Col.RELATIVE_SCORE}_bench"]
-        #     )
-        #     df = df.drop(f"{Col.RELATIVE_SCORE}_bench", axis=1)
-        #     df[Col.SCORE] = df[Col.SCORE] - df[f"{Col.SCORE}_bench"]
-        #     df = df.drop(f"{Col.SCORE}_bench", axis=1)
+        if benchmark_solver_version is not None:
+            df = pd.merge(
+                df[df.solver_version == self.solver_version],
+                df[df.solver_version == benchmark_solver_version][
+                    [Col.INPUT_FILE, Col.SCORE, Col.RELATIVE_SCORE]
+                ],
+                how="left",
+                on=Col.INPUT_FILE,
+                suffixes=["", "_bench"],
+            )
+            df[Col.RELATIVE_SCORE] = (
+                df[Col.RELATIVE_SCORE] - df[f"{Col.RELATIVE_SCORE}_bench"]
+            )
+            df = df.drop(f"{Col.RELATIVE_SCORE}_bench", axis=1)
+            df[Col.SCORE] = df[Col.SCORE] - df[f"{Col.SCORE}_bench"]
+            df = df.drop(f"{Col.SCORE}_bench", axis=1)
+
         df = df[df.solver_version == self.solver_version]
         self.logger.info(f"Raw score mean: {df.score.mean()}")
         self.logger.info(f"Relative score mean: {df[Col.RELATIVE_SCORE].mean()}")
