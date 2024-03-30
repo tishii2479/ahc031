@@ -488,7 +488,12 @@ impl StackTree {
         let mut rem_cand_node = vec![];
         while let Some(v) = q.pop() {
             if self.nodes[v].rem > 0 {
-                rem_cand_node.push((self.nodes[v].node_r, v, self.nodes[v].rem));
+                rem_cand_node.push((
+                    self.nodes[v].node_r,
+                    self.nodes[v].node_l,
+                    v,
+                    self.nodes[v].rem,
+                ));
             }
             for &u in self.nodes[v].parents.iter() {
                 if !seen.insert(u) {
@@ -498,9 +503,15 @@ impl StackTree {
             }
         }
 
-        rem_cand_node.sort();
+        rem_cand_node.sort_by(|a, b| {
+            if a.0 != b.0 {
+                a.0.cmp(&b.0)
+            } else {
+                b.1.cmp(&a.1)
+            }
+        });
         let mut use_rem_nodes = HashMap::new();
-        for (_, node_idx, rem) in rem_cand_node {
+        for (_, _, node_idx, rem) in rem_cand_node {
             let use_rem = rem.min(need_rem);
             use_rem_nodes.insert(node_idx, use_rem);
             need_rem -= use_rem;
