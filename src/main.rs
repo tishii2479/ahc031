@@ -76,7 +76,9 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
         }
     }
 
-    for _ in 0..30_000 {
+    let mut i1 = Vec::with_capacity(5);
+    let mut i2 = Vec::with_capacity(5);
+    for _t in 0..100_000 {
         let d = rnd::gen_index(input.D);
         let (col1, col2) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));
         if col1 == col2 {
@@ -85,8 +87,8 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
 
         // n:nスワップ
         let swap_count = rnd::gen_range(1, 4);
-        let mut i1 = vec![];
-        let mut i2 = vec![];
+        i1.clear();
+        i2.clear();
         let mut s1 = 0;
         let mut s2 = 0;
         for _ in 0..swap_count {
@@ -114,50 +116,45 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
         }
         let cur_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
             + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
-        i1.sort_by(|a, b| b.cmp(a));
-        i2.sort_by(|a, b| b.cmp(a));
-        let rs1 = i1
-            .iter()
-            .map(|&i| r[d][col1].swap_remove(i))
-            .collect::<Vec<usize>>();
-        let rs2 = i2
-            .iter()
-            .map(|&i| r[d][col2].swap_remove(i))
-            .collect::<Vec<usize>>();
-        for &r1 in rs1.iter() {
-            r[d][col2].push(r1);
-            heights[d][col1] -= ceil_div(input.A[d][r1], ws[col1]);
-            heights[d][col2] += ceil_div(input.A[d][r1], ws[col2]);
+        for &i in i1.iter() {
+            heights[d][col1] -= ceil_div(input.A[d][r[d][col1][i]], ws[col1]);
+            heights[d][col2] += ceil_div(input.A[d][r[d][col1][i]], ws[col2]);
         }
-        for &r2 in rs2.iter() {
-            r[d][col1].push(r2);
-            heights[d][col2] -= ceil_div(input.A[d][r2], ws[col2]);
-            heights[d][col1] += ceil_div(input.A[d][r2], ws[col1]);
+        for &i in i2.iter() {
+            heights[d][col1] += ceil_div(input.A[d][r[d][col2][i]], ws[col1]);
+            heights[d][col2] -= ceil_div(input.A[d][r[d][col2][i]], ws[col2]);
         }
         let new_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
             + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
         let new_score = cur_score + new_eval_col - cur_eval_col;
         if new_score < cur_score {
-            // eprintln!("[{:5}] sw_r: {} -> {}", t, cur_score, new_score);
-            // eprintln!("ws:      {:?}", ws);
+            eprintln!("[{:5}] sw_r: {} -> {}", _t, cur_score, new_score);
             cur_score = new_score;
+
+            i1.sort_by(|a, b| b.cmp(a));
+            i2.sort_by(|a, b| b.cmp(a));
+            let rs1 = i1
+                .iter()
+                .map(|&i| r[d][col1].swap_remove(i))
+                .collect::<Vec<usize>>();
+            let rs2 = i2
+                .iter()
+                .map(|&i| r[d][col2].swap_remove(i))
+                .collect::<Vec<usize>>();
+            for r1 in rs1 {
+                r[d][col2].push(r1);
+            }
+            for r2 in rs2 {
+                r[d][col1].push(r2);
+            }
         } else {
-            for _ in 0..rs1.len() {
-                r[d][col2].pop();
+            for &i in i1.iter() {
+                heights[d][col1] += ceil_div(input.A[d][r[d][col1][i]], ws[col1]);
+                heights[d][col2] -= ceil_div(input.A[d][r[d][col1][i]], ws[col2]);
             }
-            for _ in 0..rs2.len() {
-                r[d][col1].pop();
-            }
-            // ロールバック
-            for &r1 in rs1.iter() {
-                r[d][col1].push(r1);
-                heights[d][col1] += ceil_div(input.A[d][r1], ws[col1]);
-                heights[d][col2] -= ceil_div(input.A[d][r1], ws[col2]);
-            }
-            for &r2 in rs2.iter() {
-                r[d][col2].push(r2);
-                heights[d][col1] -= ceil_div(input.A[d][r2], ws[col1]);
-                heights[d][col2] += ceil_div(input.A[d][r2], ws[col2]);
+            for &i in i2.iter() {
+                heights[d][col1] -= ceil_div(input.A[d][r[d][col2][i]], ws[col1]);
+                heights[d][col2] += ceil_div(input.A[d][r[d][col2][i]], ws[col2]);
             }
         }
     }
