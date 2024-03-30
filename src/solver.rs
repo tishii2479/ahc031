@@ -5,6 +5,8 @@ use std::collections::VecDeque;
 use crate::def::*;
 use crate::util::*;
 
+use self::rnd::gen_range;
+
 /// Returns:
 /// match_count: i64 = 切り替えをした回数
 /// groups: Vec<(((usize, usize), (usize, usize), i64)> = 対応するノードの添字、次以降に使える余裕
@@ -274,8 +276,9 @@ impl<'a> Solver<'a> {
                 } else {
                     self.state.r[d][col].swap(i, j);
                 }
-            } else if p < 0.7 {
-                // 列間1:1swap
+            } else {
+                // 列間n:nスワップ
+                let move_count = rnd::gen_range(2, 6);
                 let (col1, col2) = (
                     rnd::gen_index(self.state.ws.len()),
                     rnd::gen_index(self.state.ws.len()),
@@ -287,9 +290,34 @@ impl<'a> Solver<'a> {
                     rnd::gen_index(self.state.r[d][col1].len()),
                     rnd::gen_index(self.state.r[d][col2].len()),
                 );
-                (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
-                    (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
+                let (mut cnt1, mut cnt2) = (1, 1);
+                let (mut h1, mut h2) = (
+                    self.input.A[d][self.state.r[d][col1][i1]],
+                    self.input.A[d][self.state.r[d][col2][i2]],
+                );
 
+                // 低い方に足す
+                for _ in 2..move_count {
+                    if h1 <= h2 && i1 + cnt1 < self.state.r[d][col1].len() {
+                        h1 += self.input.A[d][self.state.r[d][col1][i1 + cnt1]];
+                        cnt1 += 1;
+                    } else if h2 <= h1 && i2 + cnt2 < self.state.r[d][col2].len() {
+                        h2 += self.input.A[d][self.state.r[d][col2][i2 + cnt2]];
+                        cnt2 += 1;
+                    }
+                }
+                let rs1 = (0..cnt1)
+                    .map(|_| self.state.r[d][col1].remove(i1))
+                    .collect::<Vec<usize>>();
+                let rs2 = (0..cnt2)
+                    .map(|_| self.state.r[d][col2].remove(i2))
+                    .collect::<Vec<usize>>();
+                for &r1 in rs1.iter().rev() {
+                    self.state.r[d][col2].insert(i2, r1);
+                }
+                for &r2 in rs2.iter().rev() {
+                    self.state.r[d][col1].insert(i1, r2);
+                }
                 let new_score_col1 = self.state.eval_col(
                     d,
                     col1,
@@ -314,90 +342,22 @@ impl<'a> Solver<'a> {
                         - cur_score_col[col2].1;
 
                 if (score_diff as f64) <= threshold {
-                    // eprintln!(
-                    //     "[{:5}] swap-am-col: {} -> {}",
-                    //     t,
-                    //     cur_score,
-                    //     cur_score + score_diff
-                    // );
                     cur_score_col[col1] = new_score_col1;
                     cur_score_col[col2] = new_score_col2;
                     _cur_score += score_diff;
                 } else {
-                    (self.state.r[d][col1][i1], self.state.r[d][col2][i2]) =
-                        (self.state.r[d][col2][i2], self.state.r[d][col1][i1]);
-                }
-            } else {
-                // 列間1:2swap
-                let (mut col1, mut col2) = (
-                    rnd::gen_index(self.state.ws.len()),
-                    rnd::gen_index(self.state.ws.len()),
-                );
-                if col1 == col2 {
-                    continue;
-                }
-                let (mut i1, mut i2) = (
-                    rnd::gen_index(self.state.r[d][col1].len()),
-                    rnd::gen_index(self.state.r[d][col2].len()),
-                );
-
-                // 低い方に足すために、col1 > col2にする
-                if self.input.A[d][self.state.r[d][col1][i1]]
-                    <= self.input.A[d][self.state.r[d][col2][i2]]
-                {
-                    (col1, col2) = (col2, col1);
-                    (i1, i2) = (i2, i1);
-                }
-                if !(i2 + 1 < self.state.r[d][col2].len()) {
-                    continue;
-                }
-                let r1 = self.state.r[d][col1].remove(i1);
-                let r21 = self.state.r[d][col2].remove(i2);
-                let r22 = self.state.r[d][col2].remove(i2);
-                self.state.r[d][col1].insert(i1, r22);
-                self.state.r[d][col1].insert(i1, r21);
-                self.state.r[d][col2].insert(i2, r1);
-
-                let new_score_col1 = self.state.eval_col(
-                    d,
-                    col1,
-                    &prev_h[col1],
-                    &prev_rem[col1],
-                    self.input,
-                    cur_score_col[col1].1 > 0,
-                );
-                let new_score_col2 = self.state.eval_col(
-                    d,
-                    col2,
-                    &prev_h[col2],
-                    &prev_rem[col2],
-                    self.input,
-                    cur_score_col[col2].1 > 0,
-                );
-                let score_diff =
-                    new_score_col1.0 + new_score_col1.1 + new_score_col2.0 + new_score_col2.1
-                        - cur_score_col[col1].0
-                        - cur_score_col[col1].1
-                        - cur_score_col[col2].0
-                        - cur_score_col[col2].1;
-
-                if (score_diff as f64) <= threshold {
-                    // eprintln!(
-                    //     "[{:5}] swap-am-col: {} -> {}",
-                    //     t,
-                    //     cur_score,
-                    //     cur_score + score_diff
-                    // );
-                    cur_score_col[col1] = new_score_col1;
-                    cur_score_col[col2] = new_score_col2;
-                    _cur_score += score_diff;
-                } else {
-                    self.state.r[d][col1].remove(i1);
-                    self.state.r[d][col1].remove(i1);
-                    self.state.r[d][col2].remove(i2);
-                    self.state.r[d][col1].insert(i1, r1);
-                    self.state.r[d][col2].insert(i2, r22);
-                    self.state.r[d][col2].insert(i2, r21);
+                    for _ in 0..cnt2 {
+                        self.state.r[d][col1].remove(i1);
+                    }
+                    for _ in 0..cnt1 {
+                        self.state.r[d][col2].remove(i2);
+                    }
+                    for &r1 in rs1.iter().rev() {
+                        self.state.r[d][col1].insert(i1, r1);
+                    }
+                    for &r2 in rs2.iter().rev() {
+                        self.state.r[d][col2].insert(i2, r2);
+                    }
                 }
             }
         }
