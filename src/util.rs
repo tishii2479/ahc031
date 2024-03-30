@@ -35,6 +35,14 @@ pub mod rnd {
     pub fn gen_index(len: usize) -> usize {
         next() % len
     }
+
+    #[allow(unused)]
+    pub fn shuffle<I>(vec: &mut Vec<I>) {
+        for i in 0..vec.len() {
+            let j = gen_range(0, vec.len());
+            vec.swap(i, j);
+        }
+    }
 }
 
 pub mod time {

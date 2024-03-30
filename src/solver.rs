@@ -233,14 +233,35 @@ impl<'a> Solver<'a> {
         let end_temp: f64 = 1e-1;
 
         // eprintln!("start_cur_score: {}", cur_score);
-
         for t in 0..iteration {
             let progress = t as f64 / iteration as f64;
             let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
+            if p < 0.2 {
+                // 列内シャッフル
+                let col = rnd::gen_index(self.state.ws.len());
+                let mut new_r = self.state.r[d][col].clone();
+                rnd::shuffle(&mut new_r);
+                std::mem::swap(&mut self.state.r[d][col], &mut new_r);
 
-            if p < 0.3 {
+                let new_score_col = self.state.eval_col(
+                    d,
+                    col,
+                    &prev_h[col],
+                    &prev_rem[col],
+                    self.input,
+                    cur_score_col[col].1 > 0,
+                );
+                let score_diff =
+                    new_score_col.0 + new_score_col.1 - cur_score_col[col].0 - cur_score_col[col].1;
+                if (score_diff as f64) <= threshold {
+                    cur_score_col[col] = new_score_col;
+                    _cur_score += score_diff;
+                } else {
+                    std::mem::swap(&mut self.state.r[d][col], &mut new_r);
+                }
+            } else if p < 0.4 {
                 // 列内n回swap
                 let col = rnd::gen_index(self.state.ws.len());
                 let swap_count = rnd::gen_range(1, self.state.r[d][col].len().clamp(2, 4));
