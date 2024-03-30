@@ -192,7 +192,7 @@ class Runner:
         df = df[
             (
                 ~df.solver_version.str.startswith("optuna-")
-                # & ~df.solver_version.str.startswith("solver-")
+                & ~df.solver_version.str.startswith("solver-")
             )
             | (df.solver_version == self.solver_version)
         ]

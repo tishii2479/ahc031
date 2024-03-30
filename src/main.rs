@@ -59,7 +59,7 @@ fn eval_height(w: i64, height: i64, max_height: i64, rs_count: usize) -> i64 {
     }
 }
 
-fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i64) {
+fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i64, Vec<Vec<i64>>) {
     // 初期状態の作成
     let mut r = best_fit(&ws, input);
     let mut heights = vec![vec![0; ws.len()]; input.D];
@@ -165,7 +165,7 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
         }
     }
 
-    (r, cur_score)
+    (r, cur_score, heights)
 }
 
 fn main() {
@@ -173,9 +173,14 @@ fn main() {
     let input = Input::read_input();
 
     let mut start_cands = vec![];
+    let mut max_bin_count = 1;
+
     while time::elapsed_seconds() < FIRST_TIME_LIMIT {
         // TODO: bin_count=1は一回しかやらない
-        let bin_count = rnd::gen_range(1, input.N.min(13) + 1);
+        let bin_count = rnd::gen_range(
+            max_bin_count.max(3) - 2,
+            (max_bin_count + 2).clamp(1, input.N) + 1,
+        );
         let mut bins = (0..bin_count - 1)
             .map(|_| rnd::gen_range(1, input.W as usize) as i64)
             .collect::<Vec<i64>>();
@@ -187,10 +192,18 @@ fn main() {
             .filter(|&x| x > 0)
             .collect::<Vec<i64>>();
         ws.sort();
-        let (r, score) = optimize_initial_r(&ws, &input);
+        let (r, score, heights) = optimize_initial_r(&ws, &input);
         // eprintln!("score: {} {:?}", score, ws);
-
         start_cands.push((score, ws, r));
+
+        let max_height = *heights
+            .iter()
+            .map(|v| v.iter().max().unwrap())
+            .max()
+            .unwrap();
+        if max_height <= input.W {
+            max_bin_count = max_bin_count.max(bin_count);
+        }
     }
 
     // TODO: r = 0を取り除く
