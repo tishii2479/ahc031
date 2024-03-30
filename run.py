@@ -109,7 +109,7 @@ class Runner:
         #     df = df.drop(f"{Col.RELATIVE_SCORE}_bench", axis=1)
         #     df[Col.SCORE] = df[Col.SCORE] - df[f"{Col.SCORE}_bench"]
         #     df = df.drop(f"{Col.SCORE}_bench", axis=1)
-
+        df = df[df.solver_version == self.solver_version]
         self.logger.info(f"Raw score mean: {df.score.mean()}")
         self.logger.info(f"Relative score mean: {df[Col.RELATIVE_SCORE].mean()}")
         self.logger.info(f"Relative score median: {df[Col.RELATIVE_SCORE].median()}")
@@ -145,7 +145,7 @@ class Runner:
         database_df = (
             database_df.groupby(Col.SOLVER_VERSION)[[Col.RELATIVE_SCORE, Col.SCORE]]
             .mean()
-            .sort_values(by=Col.RELATIVE_SCORE, ascending=not self.is_maximize)
+            .sort_values(by=Col.RELATIVE_SCORE, ascending=self.is_maximize)
         )
         self.logger.info(database_df[:top_k])
 

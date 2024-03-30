@@ -37,7 +37,7 @@ fn match_greedy(
             }
 
             // 回収する
-            // ISSUE: prev_pickup_rem[:, prev_h.len() - 1]しか残ってないのでは？
+            // 最終的にはprev_pickup_rem[:, prev_h.len() - 1]しか残らない
             if prev_r < prev_h.len() - 1 {
                 prev_height += prev_pickup_rems[prev_r];
                 prev_rem_sum -= prev_pickup_rems[prev_r];
@@ -264,7 +264,7 @@ impl<'a> Solver<'a> {
             } else if p < 0.4 {
                 // 列内n回swap
                 let col = rnd::gen_index(self.state.ws.len());
-                let swap_count = rnd::gen_range(1, self.state.r[d][col].len().clamp(2, 4));
+                let swap_count = rnd::gen_range(1, self.state.r[d][col].len().clamp(1, 2) + 1);
                 let swaps = (0..swap_count)
                     .map(|_| {
                         (
