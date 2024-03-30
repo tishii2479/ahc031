@@ -49,12 +49,12 @@ fn best_fit(ws: &Vec<i64>, input: &Input) -> Vec<Vec<Vec<usize>>> {
 
 fn eval_height(w: i64, height: i64, max_height: i64, rs_count: usize) -> i64 {
     if height > max_height {
-        (height - max_height) * w * 1000
+        (height - max_height) * w * 1_000
     } else if rs_count > 0 {
         // 含まれていない列はスコアに加算しない
         -(max_height - height) * w
     } else {
-        0
+        1_000_000_000
     }
 }
 
@@ -75,7 +75,7 @@ fn create_col_and_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>
         }
     }
 
-    for _ in 0..100000 {
+    for _ in 0..100_000 {
         let p = rnd::nextf();
         let d = rnd::gen_index(input.D);
         let (mut col1, mut col2) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));
@@ -210,7 +210,7 @@ fn main() {
 
     let mut start_cands = vec![];
     while time::elapsed_seconds() < FIRST_TIME_LIMIT {
-        let sep = rnd::gen_range(0, 9);
+        let sep = rnd::gen_range(0, input.N.min(13));
         let mut bins = (0..sep)
             .map(|_| rnd::gen_range(1, input.W as usize) as i64)
             .collect::<Vec<i64>>();
@@ -227,6 +227,7 @@ fn main() {
 
         start_cands.push((score, ws, r));
     }
+    eprintln!("cand_count: {}", start_cands.len());
 
     start_cands.sort();
     let (_, ws, r) = start_cands[0].clone();
