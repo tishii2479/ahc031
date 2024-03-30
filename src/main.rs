@@ -63,7 +63,6 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
     // 初期状態の作成
     let mut r = best_fit(&ws, input);
     let mut heights = vec![vec![0; ws.len()]; input.D];
-    // TODO: let mut ceil_height = vec![vec![vec![0; ws.len()]; input.N]; input.D];
 
     let mut cur_score = 0;
     for d in 0..input.D {
@@ -168,14 +167,11 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
     (r, cur_score, heights)
 }
 
-fn main() {
-    time::start_clock();
-    let input = Input::read_input();
-
+fn optimize_start_cands(input: &Input) -> Vec<(i64, Vec<i64>, Vec<Vec<Vec<usize>>>)> {
     let mut start_cands = vec![];
     let mut max_bin_count = 1;
 
-    while time::elapsed_seconds() < FIRST_TIME_LIMIT {
+    while time::elapsed_seconds() < FIRST_TIME_LIMIT || start_cands.len() == 0 {
         let bin_count = rnd::gen_range(
             max_bin_count.max(3) - 2,
             (max_bin_count + 2).clamp(1, input.N) + 1,
@@ -191,8 +187,34 @@ fn main() {
             .filter(|&x| x > 0)
             .collect::<Vec<i64>>();
         ws.sort();
+
+        // 一番小さい領域に入らないものがあれば棄却
+        let mut is_valid = true;
+        let min_region = ws[0] * input.W;
+        for d in 0..input.D {
+            if min_region < input.A[d][0] {
+                is_valid = false;
+            }
+        }
+        if !is_valid {
+            continue;
+        }
+
         let (r, score, heights) = optimize_initial_r(&ws, &input);
-        // eprintln!("score: {} {:?}", score, ws);
+
+        let mut is_empty = false;
+        for d in 0..input.D {
+            for col in 0..ws.len() {
+                if r[d][col].len() == 0 {
+                    is_empty = true;
+                }
+            }
+        }
+        if is_empty {
+            continue;
+        }
+
+        eprintln!("score: {} {:?}", score, ws);
         start_cands.push((score, ws, r));
 
         let max_height = *heights
@@ -200,14 +222,24 @@ fn main() {
             .map(|v| v.iter().max().unwrap())
             .max()
             .unwrap();
-        // r=0のチェックは必要？
+
         if max_height <= input.W {
             max_bin_count = max_bin_count.max(bin_count);
         }
     }
 
-    eprintln!("cand_count: {}", start_cands.len());
+    eprintln!("cand_count:      {}", start_cands.len());
+    eprintln!("max_bin_count:   {}", max_bin_count);
     start_cands.sort();
+
+    start_cands
+}
+
+fn main() {
+    time::start_clock();
+    let input = Input::read_input();
+    let start_cands = optimize_start_cands(&input);
+
     let (_, ws, r) = start_cands[0].clone();
     eprintln!("ws({}): {:?}", ws.len(), ws);
 

@@ -5,10 +5,6 @@ use std::collections::VecDeque;
 use crate::def::*;
 use crate::util::*;
 
-/// Returns:
-/// match_count: i64 = 切り替えをした回数
-/// groups: Vec<(((usize, usize), (usize, usize), i64)> = 対応するノードの添字、次以降に使える余裕
-/// prev_pickup_rem: Vec<i64> = 前の余裕の消費具合
 fn match_greedy(
     prev_h: &Vec<i64>,
     prev_rem: &Vec<Vec<(usize, i64)>>,
