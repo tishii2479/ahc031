@@ -47,6 +47,7 @@ fn best_fit(ws: &Vec<i64>, input: &Input) -> Vec<Vec<Vec<usize>>> {
     r
 }
 
+#[inline]
 fn eval_height(w: i64, height: i64, max_height: i64, rs_count: usize) -> i64 {
     if height > max_height {
         (height - max_height) * w * 1_000
@@ -58,11 +59,11 @@ fn eval_height(w: i64, height: i64, max_height: i64, rs_count: usize) -> i64 {
     }
 }
 
-fn create_col_and_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i64) {
+fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i64) {
     // 初期状態の作成
     let mut r = best_fit(&ws, input);
     let mut heights = vec![vec![0; ws.len()]; input.D];
-    // let mut ceil_height = vec![vec![vec![0; ws.len()]; input.N]; input.D];
+    // TODO: let mut ceil_height = vec![vec![vec![0; ws.len()]; input.N]; input.D];
 
     let mut cur_score = 0;
     for d in 0..input.D {
@@ -75,131 +76,91 @@ fn create_col_and_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>
         }
     }
 
-    for _ in 0..100_000 {
-        let p = rnd::nextf();
+    for _ in 0..30_000 {
         let d = rnd::gen_index(input.D);
-        let (mut col1, mut col2) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));
-        if p < 0.3 {
-            // 領域を移動する
-            if col1 == col2 || r[d][col1].len() <= 1 {
-                continue;
+        let (col1, col2) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));
+        if col1 == col2 {
+            continue;
+        }
+
+        // n:nスワップ
+        let swap_count = rnd::gen_range(1, 4);
+        let mut i1 = vec![];
+        let mut i2 = vec![];
+        let mut s1 = 0;
+        let mut s2 = 0;
+        for _ in 0..swap_count {
+            if s1 <= s2 && i1.len() < r[d][col1].len() {
+                let i = rnd::gen_index(r[d][col1].len());
+                if i1.contains(&i) {
+                    continue;
+                }
+                s1 += input.A[d][r[d][col1][i]];
+                i1.push(i);
+            } else if s2 <= s1 && i2.len() < r[d][col2].len() {
+                let i = rnd::gen_index(r[d][col2].len());
+                if i2.contains(&i) {
+                    continue;
+                }
+                s2 += input.A[d][r[d][col2][i]];
+                i2.push(i);
             }
-            let cur_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
-                + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
-            let i = rnd::gen_index(r[d][col1].len());
-            let r1 = r[d][col1].swap_remove(i);
+        }
+        // どちらかの列がなくなってしまうなら棄却
+        if (r[d][col1].len() + i2.len() - i1.len() == 0)
+            || (r[d][col2].len() + i1.len() - i2.len() == 0)
+        {
+            continue;
+        }
+        let cur_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
+            + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
+        i1.sort_by(|a, b| b.cmp(a));
+        i2.sort_by(|a, b| b.cmp(a));
+        let rs1 = i1
+            .iter()
+            .map(|&i| r[d][col1].swap_remove(i))
+            .collect::<Vec<usize>>();
+        let rs2 = i2
+            .iter()
+            .map(|&i| r[d][col2].swap_remove(i))
+            .collect::<Vec<usize>>();
+        for &r1 in rs1.iter() {
             r[d][col2].push(r1);
             heights[d][col1] -= ceil_div(input.A[d][r1], ws[col1]);
             heights[d][col2] += ceil_div(input.A[d][r1], ws[col2]);
-            let new_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
-                + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
-            let new_score = cur_score + new_eval_col - cur_eval_col;
-            if new_score < cur_score {
-                // eprintln!("mv_r:    {} -> {}", cur_score, new_score);
-                // eprintln!("ws:      {:?}", ws);
-                cur_score = new_score;
-            } else {
-                // ロールバック
-                r[d][col2].pop();
-                r[d][col1].push(r1);
-                heights[d][col1] += ceil_div(input.A[d][r1], ws[col1]);
-                heights[d][col2] -= ceil_div(input.A[d][r1], ws[col2]);
-            }
-        } else if p < 0.7 {
-            // 1:1スワップ
-            if col1 == col2 || r[d][col1].len() == 0 || r[d][col2].len() == 0 {
-                continue;
-            }
-            let cur_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
-                + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
-            let i1 = rnd::gen_index(r[d][col1].len());
-            let i2 = rnd::gen_index(r[d][col2].len());
-            let r1 = r[d][col1].swap_remove(i1);
-            let r2 = r[d][col2].swap_remove(i2);
-            r[d][col2].push(r1);
+        }
+        for &r2 in rs2.iter() {
             r[d][col1].push(r2);
-            heights[d][col1] -= ceil_div(input.A[d][r1], ws[col1]);
-            heights[d][col2] += ceil_div(input.A[d][r1], ws[col2]);
             heights[d][col2] -= ceil_div(input.A[d][r2], ws[col2]);
             heights[d][col1] += ceil_div(input.A[d][r2], ws[col1]);
-            let new_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
-                + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
-            let new_score = cur_score + new_eval_col - cur_eval_col;
-            if new_score < cur_score {
-                // eprintln!("sw_r:    {} -> {}", cur_score, new_score);
-                // eprintln!("ws:      {:?}", ws);
-                cur_score = new_score;
-            } else {
-                // ロールバック
-                r[d][col1].pop();
-                r[d][col2].pop();
-                r[d][col1].push(r1);
-                r[d][col2].push(r2);
-                heights[d][col1] += ceil_div(input.A[d][r1], ws[col1]);
-                heights[d][col1] -= ceil_div(input.A[d][r2], ws[col1]);
-                heights[d][col2] -= ceil_div(input.A[d][r1], ws[col2]);
-                heights[d][col2] += ceil_div(input.A[d][r2], ws[col2]);
-            }
+        }
+        let new_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
+            + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
+        let new_score = cur_score + new_eval_col - cur_eval_col;
+        if new_score < cur_score {
+            // eprintln!("[{:5}] sw_r: {} -> {}", t, cur_score, new_score);
+            // eprintln!("ws:      {:?}", ws);
+            cur_score = new_score;
         } else {
-            if col1 == col2 || r[d][col1].len() == 0 || r[d][col2].len() == 0 {
-                continue;
-            }
-            let cur_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
-                + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
-            let (mut i1, mut i21) = (
-                rnd::gen_index(r[d][col1].len()),
-                rnd::gen_index(r[d][col2].len()),
-            );
-            // 低い方に足すために、col1 > col2にする
-            if input.A[d][r[d][col1][i1]] <= input.A[d][r[d][col2][i21]] {
-                (col1, col2) = (col2, col1);
-                (i1, i21) = (i21, i1);
-            }
-            let mut i22 = rnd::gen_index(r[d][col2].len());
-            if i21 == i22 {
-                continue;
-            }
-            if i21 < i22 {
-                (i21, i22) = (i22, i21);
-            }
-            let r1 = r[d][col1].swap_remove(i1);
-            let r21 = r[d][col2].swap_remove(i21);
-            let r22 = r[d][col2].swap_remove(i22);
-            r[d][col2].push(r1);
-            r[d][col1].push(r21);
-            r[d][col1].push(r22);
-            heights[d][col1] -= ceil_div(input.A[d][r1], ws[col1]);
-            heights[d][col1] += ceil_div(input.A[d][r21], ws[col1]);
-            heights[d][col1] += ceil_div(input.A[d][r22], ws[col1]);
-            heights[d][col2] += ceil_div(input.A[d][r1], ws[col2]);
-            heights[d][col2] -= ceil_div(input.A[d][r21], ws[col2]);
-            heights[d][col2] -= ceil_div(input.A[d][r22], ws[col2]);
-            let new_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
-                + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
-            let new_score = cur_score + new_eval_col - cur_eval_col;
-            if new_score < cur_score {
-                // eprintln!("sw_r:    {} -> {}", cur_score, new_score);
-                // eprintln!("ws:      {:?}", ws);
-                cur_score = new_score;
-            } else {
-                // ロールバック
-                r[d][col1].pop();
-                r[d][col1].pop();
+            for _ in 0..rs1.len() {
                 r[d][col2].pop();
+            }
+            for _ in 0..rs2.len() {
+                r[d][col1].pop();
+            }
+            // ロールバック
+            for &r1 in rs1.iter() {
                 r[d][col1].push(r1);
-                r[d][col2].push(r21);
-                r[d][col2].push(r22);
                 heights[d][col1] += ceil_div(input.A[d][r1], ws[col1]);
-                heights[d][col1] -= ceil_div(input.A[d][r21], ws[col1]);
-                heights[d][col1] -= ceil_div(input.A[d][r22], ws[col1]);
                 heights[d][col2] -= ceil_div(input.A[d][r1], ws[col2]);
-                heights[d][col2] += ceil_div(input.A[d][r21], ws[col2]);
-                heights[d][col2] += ceil_div(input.A[d][r22], ws[col2]);
+            }
+            for &r2 in rs2.iter() {
+                r[d][col2].push(r2);
+                heights[d][col1] -= ceil_div(input.A[d][r2], ws[col1]);
+                heights[d][col2] += ceil_div(input.A[d][r2], ws[col2]);
             }
         }
     }
-
-    // dbg!(&heights);
 
     (r, cur_score)
 }
@@ -210,8 +171,9 @@ fn main() {
 
     let mut start_cands = vec![];
     while time::elapsed_seconds() < FIRST_TIME_LIMIT {
-        let sep = rnd::gen_range(0, input.N.min(13));
-        let mut bins = (0..sep)
+        // TODO: bin_count=1は一回しかやらない
+        let bin_count = rnd::gen_range(1, input.N.min(14));
+        let mut bins = (0..bin_count - 1)
             .map(|_| rnd::gen_range(1, input.W as usize) as i64)
             .collect::<Vec<i64>>();
         bins.push(0);
@@ -222,7 +184,7 @@ fn main() {
             .filter(|&x| x > 0)
             .collect::<Vec<i64>>();
         ws.sort();
-        let (r, score) = create_col_and_initial_r(&ws, &input);
+        let (r, score) = optimize_initial_r(&ws, &input);
         eprintln!("score: {} {:?}", score, ws);
 
         start_cands.push((score, ws, r));
@@ -231,7 +193,7 @@ fn main() {
 
     start_cands.sort();
     let (_, ws, r) = start_cands[0].clone();
-    eprintln!("ws: {:?}", ws);
+    eprintln!("ws({}): {:?}", ws.len(), ws);
 
     let mut solver = Solver::new(ws, r, &input);
     let ans = solver.solve();

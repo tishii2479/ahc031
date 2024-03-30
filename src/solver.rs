@@ -228,7 +228,7 @@ impl<'a> Solver<'a> {
             .collect();
         let mut _cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
 
-        let iteration = 100000;
+        let iteration = 100_000;
         let start_temp: f64 = 1e2;
         let end_temp: f64 = 1e-1;
 
@@ -271,12 +271,6 @@ impl<'a> Solver<'a> {
                 let score_diff =
                     new_score_col.0 + new_score_col.1 - cur_score_col[col].0 - cur_score_col[col].1;
                 if (score_diff as f64) <= threshold {
-                    // eprintln!(
-                    //     "[{:5}] swap-in-col: {} -> {}",
-                    //     t,
-                    //     cur_score,
-                    //     cur_score + score_diff
-                    // );
                     cur_score_col[col] = new_score_col;
                     _cur_score += score_diff;
                 } else {
@@ -286,7 +280,6 @@ impl<'a> Solver<'a> {
                 }
             } else {
                 // 列間n:nスワップ
-                // TODO: 列間移動も試す
                 let move_count = rnd::gen_range(2, 6);
                 let col1 = rnd::gen_index(self.state.ws.len());
                 let col2 = rnd::gen_index(self.state.ws.len());
