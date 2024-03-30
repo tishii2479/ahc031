@@ -89,7 +89,7 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
         }
 
         // n:nスワップ
-        let swap_count = rnd::gen_range(1, 4);
+        let swap_count = rnd::gen_range(1, 4); // :param
         i1.clear();
         i2.clear();
         r1.clear();
@@ -192,8 +192,9 @@ fn main() {
 
         start_cands.push((score, ws, r));
     }
-    eprintln!("cand_count: {}", start_cands.len());
 
+    // TODO: r = 0を取り除く
+    eprintln!("cand_count: {}", start_cands.len());
     start_cands.sort();
     let (_, ws, r) = start_cands[0].clone();
     eprintln!("ws({}): {:?}", ws.len(), ws);
