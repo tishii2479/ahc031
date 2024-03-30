@@ -78,6 +78,8 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
 
     let mut i1 = Vec::with_capacity(3);
     let mut i2 = Vec::with_capacity(3);
+    let mut r1 = Vec::with_capacity(3);
+    let mut r2 = Vec::with_capacity(3);
     let iteration = input.N * input.D * 100; // :param (2_500..250_000)
     for _t in 0..iteration {
         let d = rnd::gen_index(input.D);
@@ -90,6 +92,8 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
         let swap_count = rnd::gen_range(1, 4);
         i1.clear();
         i2.clear();
+        r1.clear();
+        r2.clear();
         let mut s1 = 0;
         let mut s2 = 0;
         for _ in 0..swap_count {
@@ -98,15 +102,19 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
                 if i1.contains(&i) {
                     continue;
                 }
-                s1 += input.A[d][r[d][col1][i]];
+                let r = r[d][col1][i];
+                s1 += r;
                 i1.push(i);
+                r1.push(r);
             } else if s2 <= s1 && i2.len() < r[d][col2].len() {
                 let i = rnd::gen_index(r[d][col2].len());
                 if i2.contains(&i) {
                     continue;
                 }
-                s2 += input.A[d][r[d][col2][i]];
+                let r = r[d][col2][i];
+                s2 += r;
                 i2.push(i);
+                r2.push(r);
             }
         }
         // どちらかの列がなくなってしまうなら棄却
@@ -117,13 +125,13 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
         }
         let cur_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
             + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
-        for &i in i1.iter() {
-            heights[d][col1] -= ceil_div(input.A[d][r[d][col1][i]], ws[col1]);
-            heights[d][col2] += ceil_div(input.A[d][r[d][col1][i]], ws[col2]);
+        for &r in r1.iter() {
+            heights[d][col1] -= ceil_div(input.A[d][r], ws[col1]);
+            heights[d][col2] += ceil_div(input.A[d][r], ws[col2]);
         }
-        for &i in i2.iter() {
-            heights[d][col1] += ceil_div(input.A[d][r[d][col2][i]], ws[col1]);
-            heights[d][col2] -= ceil_div(input.A[d][r[d][col2][i]], ws[col2]);
+        for &r in r2.iter() {
+            heights[d][col1] += ceil_div(input.A[d][r], ws[col1]);
+            heights[d][col2] -= ceil_div(input.A[d][r], ws[col2]);
         }
         let new_eval_col = eval_height(ws[col1], heights[d][col1], input.W, new_r_len1)
             + eval_height(ws[col2], heights[d][col2], input.W, new_r_len2);
@@ -132,29 +140,27 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
             // eprintln!("[{:5}] sw_r: {} -> {}", _t, cur_score, new_score);
             i1.sort_by(|a, b| b.cmp(a));
             i2.sort_by(|a, b| b.cmp(a));
-            let rs1 = i1
-                .iter()
-                .map(|&i| r[d][col1].swap_remove(i))
-                .collect::<Vec<usize>>();
-            let rs2 = i2
-                .iter()
-                .map(|&i| r[d][col2].swap_remove(i))
-                .collect::<Vec<usize>>();
-            for r1 in rs1 {
+            for &i in i1.iter() {
+                r[d][col1].swap_remove(i);
+            }
+            for &i in i2.iter() {
+                r[d][col2].swap_remove(i);
+            }
+            for &r1 in r1.iter() {
                 r[d][col2].push(r1);
             }
-            for r2 in rs2 {
+            for &r2 in r2.iter() {
                 r[d][col1].push(r2);
             }
             cur_score = new_score;
         } else {
-            for &i in i1.iter() {
-                heights[d][col1] += ceil_div(input.A[d][r[d][col1][i]], ws[col1]);
-                heights[d][col2] -= ceil_div(input.A[d][r[d][col1][i]], ws[col2]);
+            for &r in r1.iter() {
+                heights[d][col1] += ceil_div(input.A[d][r], ws[col1]);
+                heights[d][col2] -= ceil_div(input.A[d][r], ws[col2]);
             }
-            for &i in i2.iter() {
-                heights[d][col1] -= ceil_div(input.A[d][r[d][col2][i]], ws[col1]);
-                heights[d][col2] += ceil_div(input.A[d][r[d][col2][i]], ws[col2]);
+            for &r in r2.iter() {
+                heights[d][col1] -= ceil_div(input.A[d][r], ws[col1]);
+                heights[d][col2] += ceil_div(input.A[d][r], ws[col2]);
             }
         }
     }
@@ -169,7 +175,7 @@ fn main() {
     let mut start_cands = vec![];
     while time::elapsed_seconds() < FIRST_TIME_LIMIT {
         // TODO: bin_count=1は一回しかやらない
-        let bin_count = rnd::gen_range(1, input.N.min(14));
+        let bin_count = rnd::gen_range(1, input.N.min(13) + 1);
         let mut bins = (0..bin_count - 1)
             .map(|_| rnd::gen_range(1, input.W as usize) as i64)
             .collect::<Vec<i64>>();
