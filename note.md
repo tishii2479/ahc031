@@ -432,3 +432,5 @@ for d in 1..input.D {
 ### 高速化
 
 - `fn match_greedy_fast() -> i64`
+
+- wsの作り方は良いのか？

@@ -314,11 +314,6 @@ impl<'a> Solver<'a> {
         let start_temp: f64 = 1e2; // :param
         let end_temp: f64 = 1e-1; // :param
 
-        // TODO: 初期解を作る
-        for col in 0..self.state.ws.len() {
-            let a = &self.state.r[d][col];
-        }
-
         let start_time = time::elapsed_seconds();
         let duration = ((TIME_LIMIT - start_time) / (self.input.D - d) as f64).max(1e-3);
         let end_time = start_time + duration;
@@ -330,6 +325,51 @@ impl<'a> Solver<'a> {
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
             if p < 0.2 {
+                // move
+                let col1 = rnd::gen_index(self.state.ws.len());
+                if self.state.r[d][col1].len() <= 1 {
+                    continue;
+                }
+                let col2 = rnd::gen_index(self.state.ws.len());
+                if col1 == col2 {
+                    continue;
+                }
+                let i1 = rnd::gen_index(self.state.r[d][col1].len());
+                let r1 = self.state.r[d][col1].remove(i1);
+                let i2 = rnd::gen_index(self.state.r[d][col2].len() + 1);
+                self.state.r[d][col2].insert(i2, r1);
+                let new_score_col1 = self.state.eval_col(
+                    d,
+                    col1,
+                    &prev_h[col1],
+                    &prev_rem[col1],
+                    self.input,
+                    cur_score_col[col1].1 > 0,
+                );
+                let new_score_col2 = self.state.eval_col(
+                    d,
+                    col2,
+                    &prev_h[col2],
+                    &prev_rem[col2],
+                    self.input,
+                    cur_score_col[col2].1 > 0,
+                );
+                let score_diff =
+                    new_score_col1.0 + new_score_col1.1 + new_score_col2.0 + new_score_col2.1
+                        - cur_score_col[col1].0
+                        - cur_score_col[col1].1
+                        - cur_score_col[col2].0
+                        - cur_score_col[col2].1;
+
+                if (score_diff as f64) <= threshold {
+                    cur_score_col[col1] = new_score_col1;
+                    cur_score_col[col2] = new_score_col2;
+                    _cur_score += score_diff;
+                } else {
+                    self.state.r[d][col2].remove(i2);
+                    self.state.r[d][col1].insert(i1, r1);
+                }
+            } else if p < 0.4 {
                 // 列内シャッフル
                 let col = rnd::gen_index(self.state.ws.len());
                 let mut new_r = self.state.r[d][col].clone();
@@ -352,7 +392,7 @@ impl<'a> Solver<'a> {
                 } else {
                     std::mem::swap(&mut self.state.r[d][col], &mut new_r);
                 }
-            } else if p < 0.4 {
+            } else if p < 0.6 {
                 // 列内n回swap
                 let col = rnd::gen_index(self.state.ws.len());
                 let swap_count = rnd::gen_range(1, self.state.r[d][col].len().clamp(1, 2) + 1);
