@@ -5,8 +5,6 @@ use std::collections::VecDeque;
 use crate::def::*;
 use crate::util::*;
 
-use self::rnd::gen_range;
-
 /// Returns:
 /// match_count: i64 = 切り替えをした回数
 /// groups: Vec<(((usize, usize), (usize, usize), i64)> = 対応するノードの添字、次以降に使える余裕
@@ -288,23 +286,19 @@ impl<'a> Solver<'a> {
                 }
             } else {
                 // 列間n:nスワップ
+                // TODO: 列間移動も試す
                 let move_count = rnd::gen_range(2, 6);
-                let (col1, col2) = (
-                    rnd::gen_index(self.state.ws.len()),
-                    rnd::gen_index(self.state.ws.len()),
-                );
+                let col1 = rnd::gen_index(self.state.ws.len());
+                let col2 = rnd::gen_index(self.state.ws.len());
                 if col1 == col2 {
                     continue;
                 }
-                let (i1, i2) = (
-                    rnd::gen_index(self.state.r[d][col1].len()),
-                    rnd::gen_index(self.state.r[d][col2].len()),
-                );
-                let (mut cnt1, mut cnt2) = (1, 1);
-                let (mut h1, mut h2) = (
-                    self.input.A[d][self.state.r[d][col1][i1]],
-                    self.input.A[d][self.state.r[d][col2][i2]],
-                );
+                let i1 = rnd::gen_index(self.state.r[d][col1].len());
+                let i2 = rnd::gen_index(self.state.r[d][col2].len());
+                let mut cnt1 = 1;
+                let mut cnt2 = 1;
+                let mut h1 = self.input.A[d][self.state.r[d][col1][i1]];
+                let mut h2 = self.input.A[d][self.state.r[d][col2][i2]];
 
                 // 低い方に足す
                 for _ in 2..move_count {
