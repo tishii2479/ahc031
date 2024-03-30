@@ -55,7 +55,7 @@ fn eval_height(w: i64, height: i64, max_height: i64, rs_count: usize) -> i64 {
         // 含まれていない列はスコアに加算しない
         -(max_height - height) * w
     } else {
-        1_000_000_000
+        1_000_000
     }
 }
 
@@ -76,8 +76,8 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
         }
     }
 
-    let mut i1 = Vec::with_capacity(5);
-    let mut i2 = Vec::with_capacity(5);
+    let mut i1 = Vec::with_capacity(3);
+    let mut i2 = Vec::with_capacity(3);
     for _t in 0..100_000 {
         let d = rnd::gen_index(input.D);
         let (col1, col2) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));
@@ -109,9 +109,9 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
             }
         }
         // どちらかの列がなくなってしまうなら棄却
-        if (r[d][col1].len() + i2.len() - i1.len() == 0)
-            || (r[d][col2].len() + i1.len() - i2.len() == 0)
-        {
+        let new_r_len1 = r[d][col1].len() + i2.len() - i1.len();
+        let new_r_len2 = r[d][col2].len() + i1.len() - i2.len();
+        if new_r_len1 == 0 || new_r_len2 == 0 {
             continue;
         }
         let cur_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
@@ -124,13 +124,11 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
             heights[d][col1] += ceil_div(input.A[d][r[d][col2][i]], ws[col1]);
             heights[d][col2] -= ceil_div(input.A[d][r[d][col2][i]], ws[col2]);
         }
-        let new_eval_col = eval_height(ws[col1], heights[d][col1], input.W, r[d][col1].len())
-            + eval_height(ws[col2], heights[d][col2], input.W, r[d][col2].len());
+        let new_eval_col = eval_height(ws[col1], heights[d][col1], input.W, new_r_len1)
+            + eval_height(ws[col2], heights[d][col2], input.W, new_r_len2);
         let new_score = cur_score + new_eval_col - cur_eval_col;
         if new_score < cur_score {
-            eprintln!("[{:5}] sw_r: {} -> {}", _t, cur_score, new_score);
-            cur_score = new_score;
-
+            // eprintln!("[{:5}] sw_r: {} -> {}", _t, cur_score, new_score);
             i1.sort_by(|a, b| b.cmp(a));
             i2.sort_by(|a, b| b.cmp(a));
             let rs1 = i1
@@ -147,6 +145,7 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
             for r2 in rs2 {
                 r[d][col1].push(r2);
             }
+            cur_score = new_score;
         } else {
             for &i in i1.iter() {
                 heights[d][col1] += ceil_div(input.A[d][r[d][col1][i]], ws[col1]);
@@ -182,7 +181,7 @@ fn main() {
             .collect::<Vec<i64>>();
         ws.sort();
         let (r, score) = optimize_initial_r(&ws, &input);
-        eprintln!("score: {} {:?}", score, ws);
+        // eprintln!("score: {} {:?}", score, ws);
 
         start_cands.push((score, ws, r));
     }

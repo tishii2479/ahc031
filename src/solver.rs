@@ -280,7 +280,7 @@ impl<'a> Solver<'a> {
                 }
             } else {
                 // 列間n:nスワップ
-                let move_count = rnd::gen_range(2, 6);
+                let move_count = rnd::gen_range(2, 6); // :param
                 let col1 = rnd::gen_index(self.state.ws.len());
                 let col2 = rnd::gen_index(self.state.ws.len());
                 if col1 == col2 {
