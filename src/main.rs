@@ -176,7 +176,6 @@ fn main() {
     let mut max_bin_count = 1;
 
     while time::elapsed_seconds() < FIRST_TIME_LIMIT {
-        // TODO: bin_count=1は一回しかやらない
         let bin_count = rnd::gen_range(
             max_bin_count.max(3) - 2,
             (max_bin_count + 2).clamp(1, input.N) + 1,
@@ -201,12 +200,12 @@ fn main() {
             .map(|v| v.iter().max().unwrap())
             .max()
             .unwrap();
+        // r=0のチェックは必要？
         if max_height <= input.W {
             max_bin_count = max_bin_count.max(bin_count);
         }
     }
 
-    // TODO: r = 0を取り除く
     eprintln!("cand_count: {}", start_cands.len());
     start_cands.sort();
     let (_, ws, r) = start_cands[0].clone();

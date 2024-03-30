@@ -228,13 +228,16 @@ impl<'a> Solver<'a> {
             .collect();
         let mut _cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
 
-        let iteration = 100_000;
         let start_temp: f64 = 1e2;
         let end_temp: f64 = 1e-1;
 
+        let start_time = time::elapsed_seconds();
+        let duration = ((TIME_LIMIT - start_time) / (self.input.D - d) as f64).max(1e-3);
+        let end_time = start_time + duration;
+
         // eprintln!("start_cur_score: {}", cur_score);
-        for t in 0..iteration {
-            let progress = t as f64 / iteration as f64;
+        while time::elapsed_seconds() < end_time {
+            let progress = (time::elapsed_seconds() - start_time) / duration;
             let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
