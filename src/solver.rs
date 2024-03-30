@@ -323,6 +323,11 @@ impl<'a> Solver<'a> {
         let mut adapt_tr_move = 0;
         let mut adapt_tr_swap = 0;
 
+        let mut action_ratio = vec![0.2, 0.2, 0.2, 0.4];
+        for i in 0..action_ratio.len() - 1 {
+            action_ratio[i + 1] += action_ratio[i];
+        }
+
         // eprintln!("start_cur_score: {}", cur_score);
         while time::elapsed_seconds() < end_time {
             let progress = (time::elapsed_seconds() - start_time) / duration;
@@ -330,9 +335,12 @@ impl<'a> Solver<'a> {
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
 
-            if p < 0.2 {
+            if p < action_ratio[0] {
                 // 列内シャッフル
                 let col = rnd::gen_index(self.state.ws.len());
+                if self.state.r[d][col].len() == 1 {
+                    continue;
+                }
                 let mut new_r = self.state.r[d][col].clone();
                 rnd::shuffle(&mut new_r);
                 std::mem::swap(&mut self.state.r[d][col], &mut new_r);
@@ -354,10 +362,13 @@ impl<'a> Solver<'a> {
                 } else {
                     std::mem::swap(&mut self.state.r[d][col], &mut new_r);
                 }
-            } else if p < 0.4 {
+            } else if p < action_ratio[1] {
                 // 列内n回swap
                 // TODO: 隣接swap
                 let col = rnd::gen_index(self.state.ws.len());
+                if self.state.r[d][col].len() == 1 {
+                    continue;
+                }
                 let swap_count = rnd::gen_range(1, self.state.r[d][col].len().clamp(1, 2) + 1);
                 let swaps = (0..swap_count)
                     .map(|_| {
@@ -394,7 +405,7 @@ impl<'a> Solver<'a> {
                         self.state.r[d][col].swap(i, j);
                     }
                 }
-            } else if p < 0.6 {
+            } else if p < action_ratio[2] {
                 // 列間1個移動
                 let col1 = rnd::gen_index(self.state.ws.len());
                 if self.state.r[d][col1].len() <= 1 {
@@ -450,13 +461,13 @@ impl<'a> Solver<'a> {
                 }
                 let i1 = rnd::gen_index(self.state.r[d][col1].len());
                 let i2 = rnd::gen_index(self.state.r[d][col2].len());
-                let mut cnt1 = 1;
-                let mut cnt2 = 1;
-                let mut h1 = self.input.A[d][self.state.r[d][col1][i1]];
-                let mut h2 = self.input.A[d][self.state.r[d][col2][i2]];
+                let mut cnt1 = 0;
+                let mut cnt2 = 0;
+                let mut h1 = 0;
+                let mut h2 = 0;
 
                 // 低い方に足す
-                for _ in 2..move_count {
+                for _ in 0..move_count {
                     if h1 <= h2 && i1 + cnt1 < self.state.r[d][col1].len() {
                         h1 += self.input.A[d][self.state.r[d][col1][i1 + cnt1]];
                         cnt1 += 1;
