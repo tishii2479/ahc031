@@ -226,12 +226,12 @@ impl<'a> Solver<'a> {
                 .map(|col| {
                     self.state.node_idx[d][col]
                         .iter()
-                        .map(|&i| self.state.trees[col].nodes[i].height)
+                        .map(|&i| self.state.graphs[col].nodes[i].height)
                         .collect()
                 })
                 .collect();
             let prev_rem: Vec<Vec<Vec<(usize, i64)>>> = (0..self.state.ws.len())
-                .map(|col| self.state.trees[col].gen_rem(&self.state.node_idx[d][col]))
+                .map(|col| self.state.graphs[col].gen_rem(&self.state.node_idx[d][col]))
                 .collect();
 
             self.optimize_r(&prev_h, &prev_rem, d);
@@ -260,7 +260,7 @@ impl<'a> Solver<'a> {
                     let (prev_g, next_g, rem) = groups[i];
                     let prev_nodes = &self.state.node_idx[d][col][prev_g.0..prev_g.1].to_vec();
                     let next_h = &next_h[next_g.0..next_g.1].to_vec();
-                    next_nodes.extend(self.state.trees[col].connect(prev_nodes, &next_h, rem));
+                    next_nodes.extend(self.state.graphs[col].connect(prev_nodes, &next_h, rem));
                 }
                 self.state.node_idx[d + 1].push(next_nodes);
             }
@@ -275,13 +275,13 @@ impl<'a> Solver<'a> {
 
         for col in 0..self.state.ws.len() {
             let w = self.state.ws[col];
-            self.state.trees[col].propagate_rem();
+            self.state.graphs[col].propagate_rem();
 
             for d in 0..self.input.D {
                 let mut height = 0;
                 for (i, &r_idx) in self.state.r[d][col].iter().enumerate() {
                     let node_idx = self.state.node_idx[d + 1][col][i];
-                    let h = self.state.trees[col].nodes[node_idx].height;
+                    let h = self.state.graphs[col].nodes[node_idx].height;
                     ans.p[d][r_idx] = (height, width, height + h, width + w);
                     height += h;
                 }
@@ -308,8 +308,8 @@ impl<'a> Solver<'a> {
             .collect();
         let mut _cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
 
-        let start_temp: f64 = 1e2;
-        let end_temp: f64 = 1e-1;
+        let start_temp: f64 = 1e2; // :param
+        let end_temp: f64 = 1e-1; // :param
 
         let start_time = time::elapsed_seconds();
         let duration = ((TIME_LIMIT - start_time) / (self.input.D - d) as f64).max(1e-3);
@@ -471,22 +471,23 @@ struct State {
     r: Vec<Vec<Vec<usize>>>,
     // node_idx[d][col][i]
     node_idx: Vec<Vec<Vec<usize>>>,
-    trees: Vec<StackTree>,
+    graphs: Vec<ColGraph>,
     shared_v: Vec<i64>,
 }
 
 impl State {
     fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, w: i64, d: usize) -> State {
+        const MAX_N: usize = 50;
         let col_count = ws.len();
         let mut state = State {
             ws,
             r,
-            trees: vec![StackTree::new(w); col_count],
+            graphs: vec![ColGraph::new(w); col_count],
             node_idx: vec![vec![]; d + 1],
-            shared_v: vec![0; 50],
+            shared_v: vec![0; MAX_N],
         };
         for col in 0..col_count {
-            state.node_idx[0].push(vec![state.trees[col].root_node]);
+            state.node_idx[0].push(vec![state.graphs[col].root_node]);
         }
         state
     }
@@ -522,19 +523,19 @@ impl State {
 }
 
 #[derive(Clone)]
-struct StackTree {
+struct ColGraph {
     nodes: Vec<Node>,
     root_node: usize,
 }
 
-impl StackTree {
-    fn new(w: i64) -> StackTree {
-        let mut tree = StackTree {
+impl ColGraph {
+    fn new(w: i64) -> ColGraph {
+        let mut graph = ColGraph {
             root_node: 0,
             nodes: vec![],
         };
-        tree.root_node = tree.new_node(0, w);
-        tree
+        graph.root_node = graph.new_node(0, w);
+        graph
     }
 
     fn new_node(&mut self, rem: i64, height: i64) -> usize {
@@ -1000,9 +1001,9 @@ fn test_match_greedy() {
 }
 
 #[test]
-fn test_stacktree() {
+fn test_stackgraph() {
     const W: i64 = 1000;
-    let mut tree = StackTree::new(W);
+    let mut graph = ColGraph::new(W);
     let hs = vec![
         vec![205, 409, 121],
         vec![700, 122, 131],
@@ -1014,25 +1015,25 @@ fn test_stacktree() {
     let w = 10;
     let mut score = 0;
 
-    node_idx[0] = vec![tree.root_node];
+    node_idx[0] = vec![graph.root_node];
 
     for (d, h) in hs.into_iter().enumerate() {
         let prev_nodes = &node_idx[d];
-        let prev_h: Vec<i64> = prev_nodes.iter().map(|&i| tree.nodes[i].height).collect();
-        let prev_rem = tree.gen_rem(&prev_nodes);
+        let prev_h: Vec<i64> = prev_nodes.iter().map(|&i| graph.nodes[i].height).collect();
+        let prev_rem = graph.gen_rem(&prev_nodes);
         let next_h = h;
 
         let (match_count, groups, _) = match_greedy(&prev_h, &prev_rem, &next_h, W);
         let switch_count = prev_h.len() + next_h.len() - match_count * 2;
         score += switch_count as i64 * w;
-        // tree.return_rem(&mut prev_pickup_rem); // 不要？
+        // graph.return_rem(&mut prev_pickup_rem); // 不要？
 
         let mut next_nodes = vec![];
         for i in 0..groups.len() {
             let (prev_g, next_g, rem) = groups[i];
             let prev_nodes = &node_idx[d][prev_g.0..prev_g.1].to_vec();
             let next_h = &next_h[next_g.0..next_g.1].to_vec();
-            next_nodes.extend(tree.connect(prev_nodes, &next_h, rem));
+            next_nodes.extend(graph.connect(prev_nodes, &next_h, rem));
         }
 
         node_idx[d + 1] = next_nodes;
