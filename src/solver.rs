@@ -87,6 +87,90 @@ fn match_greedy(
     (match_count, groups, prev_pickup_rems)
 }
 
+/// match_greedyで、vec![]を消したバージョン
+/// 切り替えを減らした回数だけを返す
+fn match_greedy_fast(
+    prev_h: &Vec<i64>,
+    prev_rem: &Vec<Vec<(usize, i64)>>,
+    next_h: &Vec<i64>,
+    w: i64,
+    prev_pickup_rems: &mut Vec<i64>,
+) -> usize {
+    let mut match_count = 0;
+    for i in 0..prev_h.len() {
+        prev_pickup_rems[i] = 0;
+    }
+
+    let mut prev_rem_sum = 0;
+    let mut next_rem_sum = w - next_h.iter().sum::<i64>();
+
+    let mut prev_height = 0;
+    let mut next_height = 0;
+    let mut prev_l = 0;
+    let mut next_l = 0;
+    let mut prev_r = 0;
+    let mut next_r = 0;
+    while prev_r < prev_h.len() || next_r < next_h.len() {
+        if (prev_r < prev_h.len() && prev_height <= next_height) || next_r == next_h.len() {
+            // 使えるようになる余裕を回収する
+            for &(r, rem) in prev_rem[prev_r].iter() {
+                prev_pickup_rems[r] += rem;
+                prev_rem_sum += rem;
+            }
+
+            // 回収する
+            // 最終的にはprev_pickup_rem[:, prev_h.len() - 1]しか残らない
+            if prev_r < prev_h.len() - 1 {
+                prev_height += prev_pickup_rems[prev_r];
+                prev_rem_sum -= prev_pickup_rems[prev_r];
+                prev_pickup_rems[prev_r] = 0;
+            }
+
+            prev_height += prev_h[prev_r];
+            prev_r += 1;
+        } else {
+            next_height += next_h[next_r];
+            next_r += 1;
+        }
+
+        // 片方が進んでいなかったら、次に進める
+        if prev_l == prev_r || next_l == next_r {
+            continue;
+        }
+        // 片方が最後まで来ていたら、両方最後まで進める
+        if (prev_r == prev_h.len() && next_r < next_h.len())
+            || (prev_r < prev_h.len() && next_r == next_h.len())
+        {
+            continue;
+        }
+
+        if prev_height <= next_height && next_height <= prev_height + prev_rem_sum {
+            let mut use_prev_rem = next_height - prev_height;
+            prev_rem_sum -= use_prev_rem;
+            for i in prev_r - 1..prev_h.len() {
+                let r = prev_pickup_rems[i].min(use_prev_rem);
+                prev_pickup_rems[i] -= r;
+                use_prev_rem -= r;
+            }
+            prev_height = next_height;
+            prev_l = prev_r;
+            next_l = next_r;
+            match_count += 1;
+        } else if next_height <= prev_height && prev_height <= next_height + next_rem_sum {
+            // nextを合わせられるなら合わせる
+            let use_next_rem = prev_height - next_height;
+            next_rem_sum -= use_next_rem;
+
+            next_height = prev_height;
+            prev_l = prev_r;
+            next_l = next_r;
+            match_count += 1;
+        }
+    }
+
+    match_count
+}
+
 fn get_squeezed_height(
     mut heights: Vec<i64>,
     r_idx: &Vec<usize>,
@@ -388,6 +472,7 @@ struct State {
     // node_idx[d][col][i]
     node_idx: Vec<Vec<Vec<usize>>>,
     trees: Vec<StackTree>,
+    shared_v: Vec<i64>,
 }
 
 impl State {
@@ -398,6 +483,7 @@ impl State {
             r,
             trees: vec![StackTree::new(w); col_count],
             node_idx: vec![vec![]; d + 1],
+            shared_v: vec![0; 50],
         };
         for col in 0..col_count {
             state.node_idx[0].push(vec![state.trees[col].root_node]);
@@ -406,7 +492,7 @@ impl State {
     }
 
     fn eval_col(
-        &self,
+        &mut self,
         d: usize,
         col: usize,
         prev_h: &Vec<i64>,
@@ -414,6 +500,9 @@ impl State {
         input: &Input,
         allow_overflow: bool,
     ) -> (i64, i64) {
+        // TODO: タイブレーク時には、余裕の残り具合も足す
+        // TODO: 幅も考慮する
+        // NOTE: 切り替え回数が変わらないなら、遷移した方が良い（スコアの差分はない方が良いのか？）
         let r_idx = &self.r[d][col];
         let heights = r_idx
             .iter()
@@ -424,14 +513,9 @@ impl State {
         }
         let (next_h, exceed_cost) =
             get_squeezed_height(heights, &self.r[d][col], d, self.ws[col], input);
-        let (match_count, _, _) = match_greedy(&prev_h, &prev_rem, &next_h, input.W);
+        let match_count =
+            match_greedy_fast(&prev_h, &prev_rem, &next_h, input.W, &mut self.shared_v);
         let switch_count = prev_h.len() + next_h.len() - match_count * 2;
-
-        // TODO: タイブレーク時には、余裕の残り具合も足す
-        // TODO: 幅も考慮する
-        // let prev_rem = prev_pickup_rem.iter().sum::<i64>();
-        // let next_rem = groups.iter().map(|g| g.2).sum::<i64>();
-        // let rem = prev_rem + next_rem;
 
         (switch_count as i64 * self.ws[col], exceed_cost)
     }

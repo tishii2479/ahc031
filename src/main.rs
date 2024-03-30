@@ -214,7 +214,7 @@ fn optimize_start_cands(input: &Input) -> Vec<(i64, Vec<i64>, Vec<Vec<Vec<usize>
             continue;
         }
 
-        eprintln!("score: {} {:?}", score, ws);
+        // eprintln!("score: {} {:?}", score, ws);
         start_cands.push((score, ws, r));
 
         let max_height = *heights
