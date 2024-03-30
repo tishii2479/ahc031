@@ -224,49 +224,10 @@ impl<'a> Solver<'a> {
         let mut total_cost = 0;
 
         for d in 0..self.input.D {
-            // 事前計算
-            let prev_h: Vec<Vec<i64>> = (0..self.state.ws.len())
-                .map(|col| {
-                    self.state.node_idx[d][col]
-                        .iter()
-                        .map(|&i| self.state.graphs[col].nodes[i].height)
-                        .collect()
-                })
-                .collect();
-            let prev_rem: Vec<Vec<Vec<(usize, i64)>>> = (0..self.state.ws.len())
-                .map(|col| self.state.graphs[col].gen_rem(&self.state.node_idx[d][col]))
-                .collect();
+            self.state.setup_prev_h_rem(d);
+            self.optimize_r(d);
 
-            self.optimize_r(&prev_h, &prev_rem, d);
-
-            // 事後計算
-            for col in 0..self.state.ws.len() {
-                let r_idx = &self.state.r[d][col];
-                let heights = r_idx
-                    .iter()
-                    .map(|&r_idx| ceil_div(self.input.A[d][r_idx], self.state.ws[col]))
-                    .collect::<Vec<i64>>();
-                let (next_h, exceed_cost) =
-                    to_squeezed_height(heights, &r_idx, d, self.state.ws[col], self.input);
-                let (match_count, groups, _) =
-                    match_greedy(&prev_h[col], &prev_rem[col], &next_h, self.input.W);
-                let switch_count = if d == 0 {
-                    0
-                } else {
-                    next_h.len() + prev_h[col].len() - match_count * 2
-                };
-                total_cost += switch_count as i64 * self.state.ws[col];
-                total_cost += exceed_cost;
-
-                let mut next_nodes = vec![];
-                for i in 0..groups.len() {
-                    let (prev_g, next_g, rem) = groups[i];
-                    let prev_nodes = &self.state.node_idx[d][col][prev_g.0..prev_g.1].to_vec();
-                    let next_h = &next_h[next_g.0..next_g.1].to_vec();
-                    next_nodes.extend(self.state.graphs[col].connect(prev_nodes, &next_h, rem));
-                }
-                self.state.node_idx[d + 1].push(next_nodes);
-            }
+            total_cost += self.state.to_next_d(d, self.input);
         }
 
         self.create_answer(total_cost)
@@ -297,17 +258,9 @@ impl<'a> Solver<'a> {
     }
 
     /// TODO: d=0は余裕だけを評価する
-    fn optimize_r(
-        &mut self,
-        prev_h: &Vec<Vec<i64>>,
-        prev_rem: &Vec<Vec<Vec<(usize, i64)>>>,
-        d: usize,
-    ) {
+    fn optimize_r(&mut self, d: usize) {
         let mut cur_score_col: Vec<(i64, i64)> = (0..self.state.ws.len())
-            .map(|col| {
-                self.state
-                    .eval_col(d, col, &prev_h[col], &prev_rem[col], self.input, true)
-            })
+            .map(|col| self.state.eval_col(d, col, self.input, true))
             .collect();
         let mut _cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
 
@@ -345,14 +298,9 @@ impl<'a> Solver<'a> {
                 rnd::shuffle(&mut new_r);
                 std::mem::swap(&mut self.state.r[d][col], &mut new_r);
 
-                let new_score_col = self.state.eval_col(
-                    d,
-                    col,
-                    &prev_h[col],
-                    &prev_rem[col],
-                    self.input,
-                    cur_score_col[col].1 > 0,
-                );
+                let new_score_col =
+                    self.state
+                        .eval_col(d, col, self.input, cur_score_col[col].1 > 0);
                 let score_diff =
                     new_score_col.0 + new_score_col.1 - cur_score_col[col].0 - cur_score_col[col].1;
                 if (score_diff as f64) <= threshold {
@@ -386,14 +334,9 @@ impl<'a> Solver<'a> {
                 for &(i, j) in swaps.iter() {
                     self.state.r[d][col].swap(i, j);
                 }
-                let new_score_col = self.state.eval_col(
-                    d,
-                    col,
-                    &prev_h[col],
-                    &prev_rem[col],
-                    self.input,
-                    cur_score_col[col].1 > 0,
-                );
+                let new_score_col =
+                    self.state
+                        .eval_col(d, col, self.input, cur_score_col[col].1 > 0);
                 let score_diff =
                     new_score_col.0 + new_score_col.1 - cur_score_col[col].0 - cur_score_col[col].1;
                 if (score_diff as f64) <= threshold {
@@ -419,22 +362,12 @@ impl<'a> Solver<'a> {
                 let r1 = self.state.r[d][col1].remove(i1);
                 let i2 = rnd::gen_index(self.state.r[d][col2].len() + 1);
                 self.state.r[d][col2].insert(i2, r1);
-                let new_score_col1 = self.state.eval_col(
-                    d,
-                    col1,
-                    &prev_h[col1],
-                    &prev_rem[col1],
-                    self.input,
-                    cur_score_col[col1].1 > 0,
-                );
-                let new_score_col2 = self.state.eval_col(
-                    d,
-                    col2,
-                    &prev_h[col2],
-                    &prev_rem[col2],
-                    self.input,
-                    cur_score_col[col2].1 > 0,
-                );
+                let new_score_col1 =
+                    self.state
+                        .eval_col(d, col1, self.input, cur_score_col[col1].1 > 0);
+                let new_score_col2 =
+                    self.state
+                        .eval_col(d, col2, self.input, cur_score_col[col2].1 > 0);
                 let score_diff =
                     new_score_col1.0 + new_score_col1.1 + new_score_col2.0 + new_score_col2.1
                         - cur_score_col[col1].0
@@ -488,22 +421,12 @@ impl<'a> Solver<'a> {
                 for &r2 in rs2.iter().rev() {
                     self.state.r[d][col1].insert(i1, r2);
                 }
-                let new_score_col1 = self.state.eval_col(
-                    d,
-                    col1,
-                    &prev_h[col1],
-                    &prev_rem[col1],
-                    self.input,
-                    cur_score_col[col1].1 > 0,
-                );
-                let new_score_col2 = self.state.eval_col(
-                    d,
-                    col2,
-                    &prev_h[col2],
-                    &prev_rem[col2],
-                    self.input,
-                    cur_score_col[col2].1 > 0,
-                );
+                let new_score_col1 =
+                    self.state
+                        .eval_col(d, col1, self.input, cur_score_col[col1].1 > 0);
+                let new_score_col2 =
+                    self.state
+                        .eval_col(d, col2, self.input, cur_score_col[col2].1 > 0);
                 let score_diff =
                     new_score_col1.0 + new_score_col1.1 + new_score_col2.0 + new_score_col2.1
                         - cur_score_col[col1].0
@@ -545,6 +468,8 @@ struct State {
     r: Vec<Vec<Vec<usize>>>,
     // node_idx[d][col][i]
     node_idx: Vec<Vec<Vec<usize>>>,
+    prev_h: Vec<Vec<i64>>,
+    prev_rem: Vec<Vec<Vec<(usize, i64)>>>,
     graphs: Vec<ColGraph>,
     shared_v: Vec<i64>,
 }
@@ -556,6 +481,8 @@ impl State {
         let mut state = State {
             ws,
             r,
+            prev_h: vec![],
+            prev_rem: vec![],
             graphs: vec![ColGraph::new(w); col_count],
             node_idx: vec![vec![]; d + 1],
             shared_v: vec![0; MAX_N],
@@ -570,8 +497,6 @@ impl State {
         &mut self,
         d: usize,
         col: usize,
-        prev_h: &Vec<i64>,
-        prev_rem: &Vec<Vec<(usize, i64)>>,
         input: &Input,
         allow_overflow: bool,
     ) -> (i64, i64) {
@@ -588,11 +513,64 @@ impl State {
         }
         let (next_h, exceed_cost) =
             to_squeezed_height(heights, &self.r[d][col], d, self.ws[col], input);
-        let match_count =
-            match_greedy_fast(&prev_h, &prev_rem, &next_h, input.W, &mut self.shared_v);
-        let switch_count = prev_h.len() + next_h.len() - match_count * 2;
+        let match_count = match_greedy_fast(
+            &self.prev_h[col],
+            &self.prev_rem[col],
+            &next_h,
+            input.W,
+            &mut self.shared_v,
+        );
+        let switch_count = self.prev_h.len() + next_h.len() - match_count * 2;
 
         (switch_count as i64 * self.ws[col], exceed_cost)
+    }
+
+    fn setup_prev_h_rem(&mut self, d: usize) {
+        // 事前計算
+        let prev_h: Vec<Vec<i64>> = (0..self.ws.len())
+            .map(|col| {
+                self.node_idx[d][col]
+                    .iter()
+                    .map(|&i| self.graphs[col].nodes[i].height)
+                    .collect()
+            })
+            .collect();
+        let prev_rem: Vec<Vec<Vec<(usize, i64)>>> = (0..self.ws.len())
+            .map(|col| self.graphs[col].gen_rem(&self.node_idx[d][col]))
+            .collect();
+        self.prev_h = prev_h;
+        self.prev_rem = prev_rem;
+    }
+
+    fn to_next_d(&mut self, d: usize, input: &Input) -> i64 {
+        let mut cost = 0;
+        for col in 0..self.ws.len() {
+            let r_idx = &self.r[d][col];
+            let heights = r_idx
+                .iter()
+                .map(|&r_idx| ceil_div(input.A[d][r_idx], self.ws[col]))
+                .collect::<Vec<i64>>();
+            let (next_h, exceed_cost) = to_squeezed_height(heights, &r_idx, d, self.ws[col], input);
+            let (match_count, groups, _) =
+                match_greedy(&self.prev_h[col], &self.prev_rem[col], &next_h, input.W);
+            let switch_count = if d == 0 {
+                0
+            } else {
+                next_h.len() + self.prev_h[col].len() - match_count * 2
+            };
+            cost += switch_count as i64 * self.ws[col];
+            cost += exceed_cost;
+
+            let mut next_nodes = vec![];
+            for i in 0..groups.len() {
+                let (prev_g, next_g, rem) = groups[i];
+                let prev_nodes = &self.node_idx[d][col][prev_g.0..prev_g.1].to_vec();
+                let next_h = &next_h[next_g.0..next_g.1].to_vec();
+                next_nodes.extend(self.graphs[col].connect(prev_nodes, &next_h, rem));
+            }
+            self.node_idx[d + 1].push(next_nodes);
+        }
+        cost
     }
 }
 
