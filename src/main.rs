@@ -88,7 +88,7 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
         }
 
         // n:nスワップ
-        let swap_count = rnd::gen_range(1, 4); // :param
+        let swap_count = rnd::gen_range(1, 5); // :param
         i1.clear();
         i2.clear();
         r1.clear();
