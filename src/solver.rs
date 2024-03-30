@@ -243,17 +243,25 @@ impl<'a> Solver<'a> {
             let p = rnd::nextf();
 
             if p < 0.3 {
-                // 列内1:1swap
+                // 列内n回swap
                 let col = rnd::gen_index(self.state.ws.len());
-                let (i, j) = (
-                    rnd::gen_index(self.state.r[d][col].len()),
-                    rnd::gen_index(self.state.r[d][col].len()),
-                );
-                if i == j {
+                let swap_count = rnd::gen_range(1, self.state.r[d][col].len().clamp(2, 4));
+                let swaps = (0..swap_count)
+                    .map(|_| {
+                        (
+                            rnd::gen_index(self.state.r[d][col].len()),
+                            rnd::gen_index(self.state.r[d][col].len()),
+                        )
+                    })
+                    .filter(|(i, j)| i != j)
+                    .collect::<Vec<(usize, usize)>>();
+                if swaps.len() == 0 {
                     continue;
                 }
 
-                self.state.r[d][col].swap(i, j);
+                for &(i, j) in swaps.iter() {
+                    self.state.r[d][col].swap(i, j);
+                }
                 let new_score_col = self.state.eval_col(
                     d,
                     col,
@@ -274,7 +282,9 @@ impl<'a> Solver<'a> {
                     cur_score_col[col] = new_score_col;
                     _cur_score += score_diff;
                 } else {
-                    self.state.r[d][col].swap(i, j);
+                    for &(i, j) in swaps.iter().rev() {
+                        self.state.r[d][col].swap(i, j);
+                    }
                 }
             } else {
                 // 列間n:nスワップ
