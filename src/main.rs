@@ -174,7 +174,7 @@ fn optimize_start_cands(
 
     while time::elapsed_seconds() < time_limit || start_cands.len() == 0 {
         let max_bin_count = (base_bin_count + 3).clamp(1, input.N) + 1;
-        let bin_count = if rnd::nextf() < 0.7 {
+        let bin_count = if rnd::nextf() < 0.9 {
             rnd::gen_range(base_bin_count.max(3) - 2, max_bin_count)
         } else {
             rnd::gen_range(1, max_bin_count)
@@ -259,7 +259,7 @@ pub fn load_params() -> Param {
 
 fn main() {
     time::start_clock();
-    const FIRST_TIME_LIMIT: f64 = 0.5;
+    const FIRST_TIME_LIMIT: f64 = 0.4;
     let input = Input::read_input();
     let param = load_params();
     let start_cands = optimize_start_cands(&input, FIRST_TIME_LIMIT);
