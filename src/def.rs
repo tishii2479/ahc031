@@ -49,3 +49,8 @@ impl Answer {
         );
     }
 }
+
+pub struct Param {
+    pub start_temp: f64,
+    pub end_temp: f64,
+}

@@ -227,21 +227,21 @@ pub struct Solver<'a> {
 }
 
 impl<'a> Solver<'a> {
-    pub fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, input: &Input) -> Solver {
+    pub fn new(ws: Vec<i64>, r: Vec<Vec<Vec<usize>>>, input: &'a Input) -> Solver {
         Solver {
             state: State::new(ws, r, input.W, input.D),
             input,
         }
     }
 
-    pub fn solve(&mut self, time_limit: f64) -> Answer {
+    pub fn solve(&mut self, time_limit: f64, param: &Param) -> Answer {
         self.state.setup_heights(self.input);
 
         let mut total_cost = 0;
         for d in 0..self.input.D {
             self.state.setup_prev_h_rem(d);
             if d != self.input.D - 1 {
-                self.optimize_r(d, time_limit);
+                self.optimize_r(d, time_limit, param);
             }
 
             total_cost += self.state.to_next_d(d, self.input);
@@ -251,11 +251,8 @@ impl<'a> Solver<'a> {
     }
 
     /// d日目とd+1日目を同時に最適化する
-    fn optimize_r(&mut self, d: usize, time_limit: f64) {
+    fn optimize_r(&mut self, d: usize, time_limit: f64, param: &Param) {
         self.state.setup_score(d, self.input);
-
-        let start_temp: f64 = 1e1; // :param
-        let end_temp: f64 = 1e-1; // :param
 
         let is_last = d == self.input.D - 2;
         let start_time = time::elapsed_seconds();
@@ -268,6 +265,8 @@ impl<'a> Solver<'a> {
         let mut adapt_tr_move = 0;
         let mut adapt_tr_swap = 0;
 
+        let start_temp = param.start_temp;
+        let end_temp = param.end_temp;
         let mut action_ratio = vec![0.1, 0.4, 0.5]; // TODO: act_dごとに変える
         for i in 0..action_ratio.len() - 1 {
             action_ratio[i + 1] += action_ratio[i];

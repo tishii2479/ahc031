@@ -6,8 +6,6 @@ use crate::def::*;
 use crate::solver::*;
 use crate::util::*;
 
-const FIRST_TIME_LIMIT: f64 = 0.5;
-
 fn best_fit(ws: &Vec<i64>, input: &Input) -> Vec<Vec<Vec<usize>>> {
     let mut r = vec![vec![vec![]; ws.len()]; input.D];
     for d in 0..input.D {
@@ -172,7 +170,7 @@ fn optimize_start_cands(
     time_limit: f64,
 ) -> Vec<(i64, Vec<i64>, Vec<Vec<Vec<usize>>>)> {
     let mut start_cands = vec![];
-    let mut base_bin_count = (input.N - 4).clamp(1, 7); // :param
+    let mut base_bin_count = input.N / 5;
 
     while time::elapsed_seconds() < time_limit || start_cands.len() == 0 {
         let max_bin_count = (base_bin_count + 3).clamp(1, input.N) + 1;
@@ -240,9 +238,28 @@ fn optimize_start_cands(
     start_cands
 }
 
+pub fn load_params() -> Param {
+    let load_from_cmd_args = false;
+    if load_from_cmd_args {
+        use std::env;
+        let args: Vec<String> = env::args().collect();
+        Param {
+            start_temp: args[1].parse::<f64>().unwrap(),
+            end_temp: args[2].parse::<f64>().unwrap(),
+        }
+    } else {
+        Param {
+            start_temp: 1e1,
+            end_temp: 1e-1,
+        }
+    }
+}
+
 fn main() {
     time::start_clock();
+    const FIRST_TIME_LIMIT: f64 = 0.5;
     let input = Input::read_input();
+    let param = load_params();
     let start_cands = optimize_start_cands(&input, FIRST_TIME_LIMIT);
     let start_count = 1;
     eprintln!("start-count: {}", start_count);
@@ -255,7 +272,7 @@ fn main() {
         let mut solver = Solver::new(ws, r, &input);
         let start_time = time::elapsed_seconds();
         let time_limit = (TIME_LIMIT - start_time) / (start_count - i) as f64 + start_time;
-        let ans = solver.solve(time_limit);
+        let ans = solver.solve(time_limit, &param);
         eprintln!("score: {:7}", ans.score);
         answers.push(ans);
     }
