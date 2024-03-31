@@ -85,7 +85,7 @@ class Runner:
     def evalute_relative_score(
         self,
         k: int = 10,
-        bins: int = 4,
+        bins: int = 6,
         benchmark_solver_version: Optional[str] = None,
         columns: Optional[List[str]] = None,
         eval_items: List[str] = [Col.SCORE, Col.RELATIVE_SCORE],
@@ -192,8 +192,8 @@ class Runner:
             ]
         df = df[
             (
-                # ~df.solver_version.str.startswith("optuna-")
-                ~df.solver_version.str.startswith("solver-")
+                ~df.solver_version.str.startswith("optuna-")
+                & ~df.solver_version.str.startswith("solver-")
             )
             | (df.solver_version == self.solver_version)
         ]
@@ -273,7 +273,7 @@ if __name__ == "__main__":
         log_file=args.log_file,
         is_maximize=False,
     )
-    columns = ["a.sum.mean", "d"]
+    columns = ["n", "d"]
     # columns = ["n", "d"]
 
     if args.list_solver:

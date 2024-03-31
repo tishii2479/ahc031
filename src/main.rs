@@ -263,7 +263,7 @@ fn main() {
     let input = Input::read_input();
     let param = load_params();
     let start_cands = optimize_start_cands(&input, FIRST_TIME_LIMIT);
-    let start_count = 1;
+    let start_count = get_start_count(&input);
 
     eprintln!("start-count: {}", start_count);
 
@@ -281,4 +281,13 @@ fn main() {
     }
     let best_ans = answers.iter().min_by(|a, b| a.score.cmp(&b.score)).unwrap();
     best_ans.output();
+}
+
+fn get_start_count(input: &Input) -> usize {
+    let v = input.N * input.D / 25;
+    if v <= 5 {
+        10
+    } else {
+        15 - v.min(14)
+    }
 }
