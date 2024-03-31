@@ -167,15 +167,22 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
     (r, cur_score, heights)
 }
 
-fn optimize_start_cands(input: &Input) -> Vec<(i64, Vec<i64>, Vec<Vec<Vec<usize>>>)> {
+fn optimize_start_cands(
+    input: &Input,
+    time_limit: f64,
+) -> Vec<(i64, Vec<i64>, Vec<Vec<Vec<usize>>>)> {
     let mut start_cands = vec![];
-    let mut max_bin_count = 1;
+    let mut max_bin_count = (input.N - 4).clamp(1, 7); // :param
 
-    while time::elapsed_seconds() < FIRST_TIME_LIMIT || start_cands.len() == 0 {
-        let bin_count = rnd::gen_range(
-            max_bin_count.max(3) - 2,
-            (max_bin_count + 2).clamp(1, input.N) + 1,
-        );
+    while time::elapsed_seconds() < time_limit || start_cands.len() == 0 {
+        let bin_count = if rnd::nextf() < 0.7 {
+            rnd::gen_range(
+                max_bin_count.max(3) - 2,
+                (max_bin_count + 3).clamp(1, input.N) + 1,
+            )
+        } else {
+            rnd::gen_range(1, (max_bin_count + 3).clamp(1, input.N) + 1)
+        };
         let mut bins = (0..bin_count - 1)
             .map(|_| rnd::gen_range(1, input.W as usize) as i64)
             .collect::<Vec<i64>>();
@@ -238,7 +245,7 @@ fn optimize_start_cands(input: &Input) -> Vec<(i64, Vec<i64>, Vec<Vec<Vec<usize>
 fn main() {
     time::start_clock();
     let input = Input::read_input();
-    let start_cands = optimize_start_cands(&input);
+    let start_cands = optimize_start_cands(&input, FIRST_TIME_LIMIT);
     let start_count = 1;
     eprintln!("start-count: {}", start_count);
 
