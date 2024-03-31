@@ -281,7 +281,7 @@ impl<'a> Solver<'a> {
         while time::elapsed_seconds() < end_time {
             let act_d = if rnd::nextf() < d_ratio { d } else { d + 1 };
             let progress = (time::elapsed_seconds() - start_time) / duration;
-            let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
+            let cur_temp = end_temp + (start_temp - end_temp) * (1. - progress);
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
 
