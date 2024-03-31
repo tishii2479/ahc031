@@ -186,34 +186,39 @@ fn to_squeezed_height(
     d: usize,
     w: i64,
     input: &Input,
+    space_for_r_idx: &mut Vec<(i64, usize)>,
 ) -> i64 {
     // 超過してしまう場合は、縮めることで損をしない領域（余りが大きい領域）を縮める
     let mut over_height = height_sum - input.W;
-    let mut exceed_cost = 0;
+    let mut exceed_s = 0;
     heights.clear();
     for &h in base_heights.iter() {
         heights.push(h);
     }
     if over_height > 0 {
-        let mut space_for_r_idx = (0..heights.len())
-            .map(|i| {
-                let over_s = input.A[d][r_idx[i]] % w;
-                (if over_s == 0 { w } else { over_s }, i)
-            })
-            .collect::<Vec<(i64, usize)>>();
-        space_for_r_idx.sort();
+        space_for_r_idx.clear();
+        for i in 0..heights.len() {
+            let over_s = input.A[d][r_idx[i]] % w;
+            space_for_r_idx.push((if over_s == 0 { w } else { over_s }, i));
+        }
+        space_for_r_idx.sort_unstable();
         while over_height > 0 {
             let (space, idx) = space_for_r_idx.remove(0);
             if heights[idx] > 1 {
-                exceed_cost += space;
-                heights[idx] -= 1;
-                over_height -= 1;
+                let sub = if space == w {
+                    over_height.min(heights[idx] - 1)
+                } else {
+                    1
+                };
+                exceed_s += space * sub;
+                heights[idx] -= sub;
+                over_height -= sub;
             }
             space_for_r_idx.push((w, idx));
         }
     }
 
-    exceed_cost * EXCEED_COST
+    exceed_s * EXCEED_COST
 }
 
 pub struct Solver<'a> {
@@ -263,7 +268,7 @@ impl<'a> Solver<'a> {
         let mut adapt_tr_move = 0;
         let mut adapt_tr_swap = 0;
 
-        let mut action_ratio = vec![0., 0.1, 0.4, 0.5]; // TODO: act_dごとに変える
+        let mut action_ratio = vec![0.1, 0.4, 0.5]; // TODO: act_dごとに変える
         for i in 0..action_ratio.len() - 1 {
             action_ratio[i + 1] += action_ratio[i];
         }
@@ -280,7 +285,7 @@ impl<'a> Solver<'a> {
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
 
-            if p < action_ratio[1] {
+            if p < action_ratio[0] {
                 // 列内n回swap
                 let col = rnd::gen_index(self.state.ws.len());
                 if self.state.r[act_d][col].len() == 1 {
@@ -304,6 +309,7 @@ impl<'a> Solver<'a> {
                 for &(i, j) in swaps.iter() {
                     self.state.swap_r(act_d, col, i, j);
                 }
+
                 let new_score_col = self.state.eval_col(d, col, self.input, false);
                 let score_diff = self.state.get_score_col_diff(col, new_score_col);
                 if (score_diff as f64) <= threshold {
@@ -315,7 +321,7 @@ impl<'a> Solver<'a> {
                         self.state.swap_r(act_d, col, i, j);
                     }
                 }
-            } else if p < action_ratio[2] {
+            } else if p < action_ratio[1] {
                 // 列間1個移動
                 let col1 = rnd::gen_index(self.state.ws.len());
                 if self.state.r[act_d][col1].len() <= 1 {
@@ -327,7 +333,17 @@ impl<'a> Solver<'a> {
                 }
                 let i1 = rnd::gen_index(self.state.r[act_d][col1].len());
                 let i2 = rnd::gen_index(self.state.r[act_d][col2].len() + 1);
+
+                let current_height_sum = self.state.height_sum[act_d][col2];
                 self.state.move_r(act_d, (col1, i1), (col2, i2), self.input);
+                let new_height_sum = self.state.height_sum[act_d][col2];
+
+                // 高さが超過していて、さらに超過するなら棄却する
+                if current_height_sum > self.input.W && new_height_sum > current_height_sum {
+                    self.state.move_r(act_d, (col2, i2), (col1, i1), self.input);
+                    continue;
+                }
+
                 let new_score_col1 = self.state.eval_col(d, col1, self.input, false);
                 let new_score_col2 = self.state.eval_col(d, col2, self.input, false);
                 let score_diff = self.state.get_score_col_diff(col1, new_score_col1)
@@ -368,6 +384,9 @@ impl<'a> Solver<'a> {
                 }
                 rs1.clear();
                 rs2.clear();
+
+                let current_height_sum1 = self.state.height_sum[act_d][col1];
+                let current_height_sum2 = self.state.height_sum[act_d][col2];
                 for _ in 0..cnt1 {
                     rs1.push(self.state.remove_r(act_d, col1, i1));
                 }
@@ -379,6 +398,27 @@ impl<'a> Solver<'a> {
                 }
                 for &r2 in rs2.iter().rev() {
                     self.state.insert_r(act_d, col1, i1, r2, self.input);
+                }
+                let new_height_sum1 = self.state.height_sum[act_d][col1];
+                let new_height_sum2 = self.state.height_sum[act_d][col2];
+
+                // 高さが超過していて、さらに超過するなら棄却する
+                if (current_height_sum1 > self.input.W && new_height_sum1 > current_height_sum1)
+                    || (current_height_sum2 > self.input.W && new_height_sum2 > current_height_sum2)
+                {
+                    for _ in 0..cnt2 {
+                        self.state.remove_r(act_d, col1, i1);
+                    }
+                    for _ in 0..cnt1 {
+                        self.state.remove_r(act_d, col2, i2);
+                    }
+                    for &r1 in rs1.iter().rev() {
+                        self.state.insert_r(act_d, col1, i1, r1, self.input);
+                    }
+                    for &r2 in rs2.iter().rev() {
+                        self.state.insert_r(act_d, col2, i2, r2, self.input);
+                    }
+                    continue;
                 }
                 let new_score_col1 = self.state.eval_col(d, col1, self.input, false);
                 let new_score_col2 = self.state.eval_col(d, col2, self.input, false);
@@ -445,6 +485,7 @@ struct SharedVec {
     v: Vec<i64>,
     prev_rem: Vec<Vec<(usize, i64)>>,
     groups: Vec<((usize, usize), (usize, usize), i64)>,
+    space_for_r_idx: Vec<(i64, usize)>,
 }
 
 struct State {
@@ -459,6 +500,7 @@ struct State {
     prev_rem: Vec<Vec<Vec<(usize, i64)>>>,
     heights: Vec<Vec<Vec<i64>>>,
     squeezed_heights: Vec<Vec<Vec<i64>>>,
+    need_update_squeezed: Vec<Vec<bool>>,
     height_sum: Vec<Vec<i64>>,
     exceed_cost: Vec<Vec<i64>>,
     graphs: Vec<ColGraph>,
@@ -480,12 +522,14 @@ impl State {
             node_idx: vec![vec![]; d + 1],
             heights: vec![vec![Vec::with_capacity(MAX_N * 2 / col_count); col_count]; d],
             squeezed_heights: vec![vec![Vec::with_capacity(MAX_N * 2 / col_count); col_count]; d],
+            need_update_squeezed: vec![vec![false; col_count]; d],
             height_sum: vec![vec![0; col_count]; d],
             exceed_cost: vec![vec![0; col_count]; d],
             shared: SharedVec {
                 v: vec![0; MAX_N],
                 prev_rem: vec![vec![]; MAX_N],
                 groups: Vec::with_capacity(MAX_N),
+                space_for_r_idx: Vec::with_capacity(MAX_N),
             },
         };
         for col in 0..col_count {
@@ -511,7 +555,7 @@ impl State {
     fn remove_r(&mut self, d: usize, col: usize, i: usize) -> usize {
         let h = self.heights[d][col].remove(i);
         if i < self.squeezed_heights[d][col].len() {
-            self.squeezed_heights[d][col].remove(i);
+            self.need_update_squeezed[d][col] = true;
         }
         self.height_sum[d][col] -= h;
         self.r[d][col].remove(i)
@@ -522,11 +566,15 @@ impl State {
         let h = ceil_div(input.A[d][r_idx], self.ws[col]);
         self.heights[d][col].insert(i, h);
         self.height_sum[d][col] += h;
+        self.need_update_squeezed[d][col] = true;
     }
 
     fn swap_r(&mut self, d: usize, col: usize, i: usize, j: usize) {
         self.r[d][col].swap(i, j);
         self.heights[d][col].swap(i, j);
+        if i < self.squeezed_heights[d][col].len() && j < self.squeezed_heights[d][col].len() {
+            self.squeezed_heights[d][col].swap(i, j);
+        }
     }
 
     fn eval_col(
@@ -549,8 +597,10 @@ impl State {
         }
         let exceed_cost1 = if self.height_sum[d][col] <= input.W {
             0
+        } else if !self.need_update_squeezed[d][col] {
+            self.exceed_cost[d][col]
         } else {
-            to_squeezed_height(
+            self.exceed_cost[d][col] = to_squeezed_height(
                 &mut self.squeezed_heights[d][col],
                 &mut self.heights[d][col],
                 self.height_sum[d][col],
@@ -558,12 +608,16 @@ impl State {
                 d,
                 self.ws[col],
                 input,
-            )
+                &mut self.shared.space_for_r_idx,
+            );
+            self.exceed_cost[d][col]
         };
         let exceed_cost2 = if self.height_sum[d + 1][col] <= input.W {
             0
+        } else if !self.need_update_squeezed[d + 1][col] {
+            self.exceed_cost[d + 1][col]
         } else {
-            to_squeezed_height(
+            self.exceed_cost[d + 1][col] = to_squeezed_height(
                 &mut self.squeezed_heights[d + 1][col],
                 &mut self.heights[d + 1][col],
                 self.height_sum[d + 1][col],
@@ -571,12 +625,19 @@ impl State {
                 d + 1,
                 self.ws[col],
                 input,
-            )
+                &mut self.shared.space_for_r_idx,
+            );
+            self.exceed_cost[d + 1][col]
         };
         let next_h = if self.height_sum[d][col] <= input.W {
             &self.heights[d][col]
         } else {
             &self.squeezed_heights[d][col]
+        };
+        let next_next_h = if self.height_sum[d + 1][col] <= input.W {
+            &self.heights[d + 1][col]
+        } else {
+            &self.squeezed_heights[d + 1][col]
         };
         let (match_count1, prev_pickup_rem1) = match_greedy(
             &self.prev_h[col],
@@ -597,12 +658,6 @@ impl State {
             self.heights[d][col].len() - 1,
             *prev_pickup_rem1.last().unwrap(),
         ));
-
-        let next_next_h = if self.height_sum[d + 1][col] <= input.W {
-            &self.heights[d + 1][col]
-        } else {
-            &self.squeezed_heights[d + 1][col]
-        };
         let match_count2 = match_greedy_fast(
             &next_h,
             &self.shared.prev_rem,
@@ -614,6 +669,7 @@ impl State {
         let switch_count2 =
             self.heights[d][col].len() + self.heights[d + 1][col].len() - match_count2 * 2;
 
+        // TODO: 調整
         let (w1, w2) = if d == 0 {
             (0, 2)
         } else if d == input.D - 2 {
@@ -622,7 +678,7 @@ impl State {
             (2, 1)
         };
         (
-            (switch_count1 * w1 + switch_count2 * w2) as i64 * self.ws[col] / 2,
+            ((switch_count1 * w1 + switch_count2 * w2) as i64 * self.ws[col]) / 2,
             exceed_cost1 + exceed_cost2,
         )
     }
@@ -672,6 +728,7 @@ impl State {
                         d,
                         self.ws[col],
                         input,
+                        &mut self.shared.space_for_r_idx,
                     );
                 }
             }
@@ -689,6 +746,7 @@ impl State {
                 d,
                 self.ws[col],
                 input,
+                &mut self.shared.space_for_r_idx,
             );
             let heights = if self.height_sum[d][col] <= input.W {
                 &self.heights[d][col]

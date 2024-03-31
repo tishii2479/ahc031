@@ -172,16 +172,14 @@ fn optimize_start_cands(
     time_limit: f64,
 ) -> Vec<(i64, Vec<i64>, Vec<Vec<Vec<usize>>>)> {
     let mut start_cands = vec![];
-    let mut max_bin_count = (input.N - 4).clamp(1, 7); // :param
+    let mut base_bin_count = (input.N - 4).clamp(1, 7); // :param
 
     while time::elapsed_seconds() < time_limit || start_cands.len() == 0 {
+        let max_bin_count = (base_bin_count + 3).clamp(1, input.N) + 1;
         let bin_count = if rnd::nextf() < 0.7 {
-            rnd::gen_range(
-                max_bin_count.max(3) - 2,
-                (max_bin_count + 3).clamp(1, input.N) + 1,
-            )
+            rnd::gen_range(base_bin_count.max(3) - 2, max_bin_count)
         } else {
-            rnd::gen_range(1, (max_bin_count + 3).clamp(1, input.N) + 1)
+            rnd::gen_range(1, max_bin_count)
         };
         let mut bins = (0..bin_count - 1)
             .map(|_| rnd::gen_range(1, input.W as usize) as i64)
@@ -231,12 +229,12 @@ fn optimize_start_cands(
             .unwrap();
 
         if max_height <= input.W {
-            max_bin_count = max_bin_count.max(bin_count);
+            base_bin_count = base_bin_count.max(bin_count);
         }
     }
 
     eprintln!("cand_count:      {}", start_cands.len());
-    eprintln!("max_bin_count:   {}", max_bin_count);
+    eprintln!("max_bin_count:   {}", base_bin_count);
     start_cands.sort();
 
     start_cands
