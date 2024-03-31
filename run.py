@@ -274,7 +274,7 @@ if __name__ == "__main__":
         is_maximize=False,
     )
     columns = ["a.sum.mean", "d"]
-    columns = ["n", "d"]
+    # columns = ["n", "d"]
 
     if args.list_solver:
         runner.list_solvers()

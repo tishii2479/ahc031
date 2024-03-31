@@ -180,6 +180,7 @@ fn match_greedy_fast(
 
 fn to_squeezed_height(
     heights: &mut Vec<i64>,
+    base_heights: &Vec<i64>,
     height_sum: i64,
     r_idx: &Vec<usize>,
     d: usize,
@@ -189,6 +190,10 @@ fn to_squeezed_height(
     // 超過してしまう場合は、縮めることで損をしない領域（余りが大きい領域）を縮める
     let mut over_height = height_sum - input.W;
     let mut exceed_cost = 0;
+    heights.clear();
+    for &h in base_heights.iter() {
+        heights.push(h);
+    }
     if over_height > 0 {
         let mut space_for_r_idx = (0..heights.len())
             .map(|i| {
@@ -254,7 +259,6 @@ impl<'a> Solver<'a> {
         let end_time = start_time + duration;
 
         let mut iteration = 0;
-        let mut adapt_in_shuf = 0;
         let mut adapt_in_swap = 0;
         let mut adapt_tr_move = 0;
         let mut adapt_tr_swap = 0;
@@ -407,7 +411,6 @@ impl<'a> Solver<'a> {
         eprintln!("score:       {:6}", self.state.score);
         eprintln!("duration:    {:.6}", duration);
         eprintln!("iteration:   {}", iteration);
-        eprintln!("in-shuf:     {}", adapt_in_shuf);
         eprintln!("in-swap:     {}", adapt_in_swap);
         eprintln!("tr-move:     {}", adapt_tr_move);
         eprintln!("tr-swap:     {}", adapt_tr_swap);
@@ -455,7 +458,9 @@ struct State {
     prev_h: Vec<Vec<i64>>,
     prev_rem: Vec<Vec<Vec<(usize, i64)>>>,
     heights: Vec<Vec<Vec<i64>>>,
+    squeezed_heights: Vec<Vec<Vec<i64>>>,
     height_sum: Vec<Vec<i64>>,
+    exceed_cost: Vec<Vec<i64>>,
     graphs: Vec<ColGraph>,
     shared: SharedVec,
 }
@@ -474,7 +479,9 @@ impl State {
             graphs: vec![ColGraph::new(w); col_count],
             node_idx: vec![vec![]; d + 1],
             heights: vec![vec![Vec::with_capacity(MAX_N * 2 / col_count); col_count]; d],
-            height_sum: vec![vec![0; col_count]; d + 1],
+            squeezed_heights: vec![vec![Vec::with_capacity(MAX_N * 2 / col_count); col_count]; d],
+            height_sum: vec![vec![0; col_count]; d],
+            exceed_cost: vec![vec![0; col_count]; d],
             shared: SharedVec {
                 v: vec![0; MAX_N],
                 prev_rem: vec![vec![]; MAX_N],
@@ -503,9 +510,13 @@ impl State {
 
     fn remove_r(&mut self, d: usize, col: usize, i: usize) -> usize {
         let h = self.heights[d][col].remove(i);
+        if i < self.squeezed_heights[d][col].len() {
+            self.squeezed_heights[d][col].remove(i);
+        }
         self.height_sum[d][col] -= h;
         self.r[d][col].remove(i)
     }
+
     fn insert_r(&mut self, d: usize, col: usize, i: usize, r_idx: usize, input: &Input) {
         self.r[d][col].insert(i, r_idx);
         let h = ceil_div(input.A[d][r_idx], self.ws[col]);
@@ -536,11 +547,41 @@ impl State {
         {
             return (0, 1 << 40);
         }
-        let exceed_cost1 = (self.height_sum[d][col] - input.W).max(0) * self.ws[col] * EXCEED_COST;
+        let exceed_cost1 = if self.height_sum[d][col] <= input.W {
+            0
+        } else {
+            to_squeezed_height(
+                &mut self.squeezed_heights[d][col],
+                &mut self.heights[d][col],
+                self.height_sum[d][col],
+                &self.r[d][col],
+                d,
+                self.ws[col],
+                input,
+            )
+        };
+        let exceed_cost2 = if self.height_sum[d + 1][col] <= input.W {
+            0
+        } else {
+            to_squeezed_height(
+                &mut self.squeezed_heights[d + 1][col],
+                &mut self.heights[d + 1][col],
+                self.height_sum[d + 1][col],
+                &self.r[d + 1][col],
+                d + 1,
+                self.ws[col],
+                input,
+            )
+        };
+        let next_h = if self.height_sum[d][col] <= input.W {
+            &self.heights[d][col]
+        } else {
+            &self.squeezed_heights[d][col]
+        };
         let (match_count1, prev_pickup_rem1) = match_greedy(
             &self.prev_h[col],
             &self.prev_rem[col],
-            &self.heights[d][col],
+            &next_h,
             input.W,
             &mut self.shared.groups,
         );
@@ -557,11 +598,15 @@ impl State {
             *prev_pickup_rem1.last().unwrap(),
         ));
 
-        let exceed_cost2 = (self.height_sum[d][col] - input.W).max(0) * self.ws[col] * EXCEED_COST;
+        let next_next_h = if self.height_sum[d + 1][col] <= input.W {
+            &self.heights[d + 1][col]
+        } else {
+            &self.squeezed_heights[d + 1][col]
+        };
         let match_count2 = match_greedy_fast(
-            &self.heights[d][col],
+            &next_h,
             &self.shared.prev_rem,
-            &self.heights[d + 1][col],
+            &next_next_h,
             self.height_sum[d + 1][col],
             input.W,
             &mut self.shared.v,
@@ -618,6 +663,17 @@ impl State {
                     self.height_sum[d][col] += h;
                     self.heights[d][col].push(h);
                 }
+                if self.height_sum[d][col] > input.W {
+                    self.exceed_cost[d][col] = to_squeezed_height(
+                        &mut self.squeezed_heights[d][col],
+                        &mut self.heights[d][col],
+                        self.height_sum[d][col],
+                        &self.r[d][col],
+                        d,
+                        self.ws[col],
+                        input,
+                    );
+                }
             }
         }
     }
@@ -626,6 +682,7 @@ impl State {
         let mut cost = 0;
         for col in 0..self.ws.len() {
             let exceed_cost = to_squeezed_height(
+                &mut self.squeezed_heights[d][col],
                 &mut self.heights[d][col],
                 self.height_sum[d][col],
                 &self.r[d][col],
@@ -633,18 +690,23 @@ impl State {
                 self.ws[col],
                 input,
             );
+            let heights = if self.height_sum[d][col] <= input.W {
+                &self.heights[d][col]
+            } else {
+                &self.squeezed_heights[d][col]
+            };
             let mut groups = vec![];
             let (match_count, _) = match_greedy(
                 &self.prev_h[col],
                 &self.prev_rem[col],
-                &self.heights[d][col],
+                &heights,
                 input.W,
                 &mut groups,
             );
             let switch_count = if d == 0 {
                 0
             } else {
-                self.heights[d][col].len() + self.prev_h[col].len() - match_count * 2
+                heights.len() + self.prev_h[col].len() - match_count * 2
             };
             cost += switch_count as i64 * self.ws[col];
             cost += exceed_cost;
@@ -653,7 +715,7 @@ impl State {
             for i in 0..groups.len() {
                 let (prev_g, next_g, rem) = groups[i];
                 let prev_nodes = &self.node_idx[d][col][prev_g.0..prev_g.1].to_vec();
-                let next_h = &self.heights[d][col][next_g.0..next_g.1].to_vec();
+                let next_h = heights[next_g.0..next_g.1].to_vec();
                 next_nodes.extend(self.graphs[col].connect(prev_nodes, &next_h, rem));
             }
             self.node_idx[d + 1].push(next_nodes);
@@ -1180,7 +1242,7 @@ fn test_match_greedy() {
     // 3:3
     let prev_h = vec![20, 30, 40];
     let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 2, 10)]);
-    let mut next_h = vec![20, 30, 40];
+    let next_h = vec![20, 30, 40];
     let mut groups = vec![];
     let (match_count, prev_pickup_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
     assert_eq!(match_count, 3);
