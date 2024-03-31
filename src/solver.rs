@@ -239,8 +239,8 @@ impl<'a> Solver<'a> {
     fn optimize_r(&mut self, d: usize, time_limit: f64) {
         self.state.setup_score(d, self.input);
 
-        let start_temp: f64 = 1e3; // :param
-        let end_temp: f64 = 1e0; // :param
+        let start_temp: f64 = 1e1; // :param
+        let end_temp: f64 = 1e-1; // :param
 
         let start_time = time::elapsed_seconds();
         let duration = ((time_limit - start_time) / (self.input.D - d - 1) as f64).max(1e-3);
@@ -575,8 +575,16 @@ impl State {
         //     next_h,
         //     next_next_h,
         // );
+
+        let (w1, w2) = if d == 0 {
+            (0, 2)
+        } else if d == input.D - 2 {
+            (2, 2)
+        } else {
+            (2, 1)
+        };
         (
-            (switch_count1 + switch_count2) as i64 * self.ws[col],
+            (switch_count1 * w1 + switch_count2 * w2) as i64 * self.ws[col] / 2,
             exceed_cost1 + exceed_cost2,
         )
     }
