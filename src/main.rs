@@ -77,7 +77,7 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
     let mut i2 = Vec::with_capacity(3);
     let mut r1 = Vec::with_capacity(3);
     let mut r2 = Vec::with_capacity(3);
-    let iteration = input.N * input.D * 100; // :param (2_500..250_000)
+    let iteration = input.N * input.D * 50; // :param (2_500..250_000)
     for _t in 0..iteration {
         let d = rnd::gen_index(input.D);
         let (col1, col2) = (rnd::gen_index(ws.len()), rnd::gen_index(ws.len()));

@@ -503,9 +503,10 @@ for d in 1..input.D {
 
 # 4/1
 
+- FIRST_TIME_LIMITの最適化
+
 ## TODO:
 
 - 列間swap（位置未固定）
 - 反対からも貪欲する
 - 配列アクセスの高速化
-- FIRST_TIME_LIMITの最適化

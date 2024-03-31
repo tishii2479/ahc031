@@ -273,8 +273,8 @@ if __name__ == "__main__":
         log_file=args.log_file,
         is_maximize=False,
     )
-    columns = ["n", "d"]
     # columns = ["n", "d"]
+    columns = ["a.sum.mean", "d"]
 
     if args.list_solver:
         runner.list_solvers()
