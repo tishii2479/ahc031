@@ -458,6 +458,7 @@ struct State {
     prev_rem: Vec<Vec<Vec<(usize, i64)>>>,
     graphs: Vec<ColGraph>,
     shared_v: Vec<i64>,
+    shared_prev_rem: Vec<Vec<(usize, i64)>>,
 }
 
 impl State {
@@ -474,6 +475,7 @@ impl State {
             graphs: vec![ColGraph::new(w); col_count],
             node_idx: vec![vec![]; d + 1],
             shared_v: vec![0; MAX_N],
+            shared_prev_rem: vec![vec![]; MAX_N],
         };
         for col in 0..col_count {
             state.node_idx[0].push(vec![state.graphs[col].root_node]);
@@ -508,18 +510,13 @@ impl State {
             match_greedy(&self.prev_h[col], &self.prev_rem[col], &next_h, input.W);
         let switch_count1 = self.prev_h[col].len() + next_h.len() - match_count1 * 2;
 
-        let mut next_prev_rem = vec![vec![]; next_h.len()]; // TODO: 使い回す
-        for &(_, (l, r), rem) in groups1.iter() {
-            // assert!(
-            //     r - 1 < next_prev_rem.len(),
-            //     "{:?} {:?} {:?}",
-            //     &groups1,
-            //     &self.prev_h,
-            //     next_h
-            // );
-            next_prev_rem[l].push((r - 1, rem));
+        for i in 0..next_h.len() {
+            self.shared_prev_rem[i].clear();
         }
-        next_prev_rem[0].push((next_h.len() - 1, *prev_pickup_rem1.last().unwrap()));
+        for &(_, (l, r), rem) in groups1.iter() {
+            self.shared_prev_rem[l].push((r - 1, rem));
+        }
+        self.shared_prev_rem[0].push((next_h.len() - 1, *prev_pickup_rem1.last().unwrap()));
 
         let r_idx = &self.r[d + 1][col];
         let heights = r_idx
@@ -531,50 +528,15 @@ impl State {
         }
         let (next_next_h, exceed_cost2) =
             to_squeezed_height(heights, &self.r[d + 1][col], d + 1, self.ws[col], input);
-        // assert_eq!(
-        //     next_h.iter().sum::<i64>()
-        //         + next_prev_rem
-        //             .iter()
-        //             .map(|v| v.iter().map(|x| x.1).sum::<i64>())
-        //             .sum::<i64>(),
-        //     input.W
-        // );
-        let (match_count2, groups2, prev_pickup_rem2) =
-            match_greedy(&next_h, &next_prev_rem, &next_next_h, input.W);
-        // assert_eq!(
-        //     prev_pickup_rem2.iter().sum::<i64>()
-        //         + next_next_h.iter().sum::<i64>()
-        //         + groups2.iter().map(|g| g.2).sum::<i64>(),
-        //     input.W,
-        //     "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
-        //     &groups1,
-        //     &groups2,
-        //     &prev_pickup_rem1,
-        //     &prev_pickup_rem2,
-        //     &self.prev_h[col],
-        //     next_h,
-        //     next_next_h,
-        // );
-        let switch_count2 = next_h.len() + next_next_h.len() - match_count2 * 2;
 
-        // eprintln!(
-        //     "d: {}, col: {}, m1: {}, m2: {}, sw1: {}, sw2: {}, ec1: {}, ec2: {}, g1: {:?}, g2: {:?}, pr1: {:?}, pr2: {:?}, ph: {:?}, nh1: {:?}, nnh2: {:?},",
-        //     d,
-        //     col,
-        //     match_count1,
-        //     match_count2,
-        //     switch_count1,
-        //     switch_count2,
-        //     exceed_cost1,
-        //     exceed_cost2,
-        //     &groups1,
-        //     &groups2,
-        //     &prev_pickup_rem1,
-        //     &prev_pickup_rem2,
-        //     &self.prev_h[col],
-        //     next_h,
-        //     next_next_h,
-        // );
+        let match_count2 = match_greedy_fast(
+            &next_h,
+            &self.shared_prev_rem,
+            &next_next_h,
+            input.W,
+            &mut self.shared_v,
+        );
+        let switch_count2 = next_h.len() + next_next_h.len() - match_count2 * 2;
 
         let (w1, w2) = if d == 0 {
             (0, 2)
