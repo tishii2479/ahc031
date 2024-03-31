@@ -259,6 +259,10 @@ impl<'a> Solver<'a> {
             action_ratio[i + 1] += action_ratio[i];
         }
 
+        let mut swaps = Vec::with_capacity(5);
+        let mut rs1 = Vec::with_capacity(5);
+        let mut rs2 = Vec::with_capacity(5);
+
         // eprintln!("start_cur_score: {}", cur_score);
         while time::elapsed_seconds() < end_time {
             let act_d = d + (rnd::next() & 1);
@@ -293,15 +297,16 @@ impl<'a> Solver<'a> {
                     continue;
                 }
                 let swap_count = rnd::gen_range(1, self.state.r[act_d][col].len().clamp(1, 2) + 1);
-                let swaps = (0..swap_count)
-                    .map(|_| {
-                        (
-                            rnd::gen_index(self.state.r[act_d][col].len()),
-                            rnd::gen_index(self.state.r[act_d][col].len()),
-                        )
-                    })
-                    .filter(|(i, j)| i != j)
-                    .collect::<Vec<(usize, usize)>>();
+                swaps.clear();
+                for _ in 0..swap_count {
+                    let (i, j) = (
+                        rnd::gen_index(self.state.r[act_d][col].len()),
+                        rnd::gen_index(self.state.r[act_d][col].len()),
+                    );
+                    if i != j {
+                        swaps.push((i, j));
+                    }
+                }
                 if swaps.len() == 0 {
                     continue;
                 }
@@ -373,12 +378,14 @@ impl<'a> Solver<'a> {
                         cnt2 += 1;
                     }
                 }
-                let rs1 = (0..cnt1)
-                    .map(|_| self.state.r[act_d][col1].remove(i1))
-                    .collect::<Vec<usize>>();
-                let rs2 = (0..cnt2)
-                    .map(|_| self.state.r[act_d][col2].remove(i2))
-                    .collect::<Vec<usize>>();
+                rs1.clear();
+                rs2.clear();
+                for _ in 0..cnt1 {
+                    rs1.push(self.state.r[act_d][col1].remove(i1));
+                }
+                for _ in 0..cnt2 {
+                    rs2.push(self.state.r[act_d][col2].remove(i2));
+                }
                 for &r1 in rs1.iter().rev() {
                     self.state.r[act_d][col2].insert(i2, r1);
                 }
@@ -447,6 +454,11 @@ impl<'a> Solver<'a> {
     }
 }
 
+struct SharedVec {
+    v: Vec<i64>,
+    prev_rem: Vec<Vec<(usize, i64)>>,
+}
+
 struct State {
     score: i64,
     score_col: Vec<(i64, i64)>,
@@ -458,8 +470,7 @@ struct State {
     prev_h: Vec<Vec<i64>>,
     prev_rem: Vec<Vec<Vec<(usize, i64)>>>,
     graphs: Vec<ColGraph>,
-    shared_v: Vec<i64>,
-    shared_prev_rem: Vec<Vec<(usize, i64)>>,
+    shared: SharedVec,
 }
 
 impl State {
@@ -475,8 +486,10 @@ impl State {
             prev_rem: vec![],
             graphs: vec![ColGraph::new(w); col_count],
             node_idx: vec![vec![]; d + 1],
-            shared_v: vec![0; MAX_N],
-            shared_prev_rem: vec![vec![]; MAX_N],
+            shared: SharedVec {
+                v: vec![0; MAX_N],
+                prev_rem: vec![vec![]; MAX_N],
+            },
         };
         for col in 0..col_count {
             state.node_idx[0].push(vec![state.graphs[col].root_node]);
@@ -514,12 +527,12 @@ impl State {
         let switch_count1 = self.prev_h[col].len() + next_h.len() - match_count1 * 2;
 
         for i in 0..next_h.len() {
-            self.shared_prev_rem[i].clear();
+            self.shared.prev_rem[i].clear();
         }
         for &(_, (l, r), rem) in groups1.iter() {
-            self.shared_prev_rem[l].push((r - 1, rem));
+            self.shared.prev_rem[l].push((r - 1, rem));
         }
-        self.shared_prev_rem[0].push((next_h.len() - 1, *prev_pickup_rem1.last().unwrap()));
+        self.shared.prev_rem[0].push((next_h.len() - 1, *prev_pickup_rem1.last().unwrap()));
 
         let r_idx = &self.r[d + 1][col];
         let heights = r_idx
@@ -534,10 +547,10 @@ impl State {
 
         let match_count2 = match_greedy_fast(
             &next_h,
-            &self.shared_prev_rem,
+            &self.shared.prev_rem,
             &next_next_h,
             input.W,
-            &mut self.shared_v,
+            &mut self.shared.v,
         );
         let switch_count2 = next_h.len() + next_next_h.len() - match_count2 * 2;
 
