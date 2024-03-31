@@ -242,8 +242,10 @@ impl<'a> Solver<'a> {
         let start_temp: f64 = 1e1; // :param
         let end_temp: f64 = 1e-1; // :param
 
+        let is_last = d == self.input.D - 2;
         let start_time = time::elapsed_seconds();
-        let duration = ((time_limit - start_time) / (self.input.D - d - 1) as f64).max(1e-3);
+        let duration = ((time_limit - start_time) / (self.input.D - d) as f64).max(1e-3)
+            * if is_last { 2. } else { 1. };
         let end_time = start_time + duration;
 
         let mut iteration = 0;
@@ -252,19 +254,18 @@ impl<'a> Solver<'a> {
         let mut adapt_tr_move = 0;
         let mut adapt_tr_swap = 0;
 
-        let mut action_ratio = vec![0.05, 0.05, 0.4, 0.5];
+        let mut action_ratio = vec![0.05, 0.05, 0.4, 0.5]; // TODO: act_dごとに変える
         for i in 0..action_ratio.len() - 1 {
             action_ratio[i + 1] += action_ratio[i];
         }
 
         // eprintln!("start_cur_score: {}", cur_score);
         while time::elapsed_seconds() < end_time {
+            let act_d = d + (rnd::next() & 1);
             let progress = (time::elapsed_seconds() - start_time) / duration;
             let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
-
-            let act_d = d + (rnd::next() & 1); // TODO: d+1をたくさんやった方が良さそう
 
             if p < action_ratio[0] {
                 // 列内シャッフル
@@ -482,6 +483,8 @@ impl State {
         }
         state
     }
+
+    fn move_r(&mut self, d: usize, from: (usize, usize), to: (usize, usize)) {}
 
     fn eval_col(
         &mut self,
