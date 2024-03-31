@@ -275,10 +275,11 @@ impl<'a> Solver<'a> {
         let mut swaps = Vec::with_capacity(5);
         let mut rs1 = Vec::with_capacity(5);
         let mut rs2 = Vec::with_capacity(5);
+        let d_ratio = if is_last { 0.5 } else { param.d_ratio };
 
         // eprintln!("start_cur_score: {}", cur_score);
         while time::elapsed_seconds() < end_time {
-            let act_d = d + (rnd::next() & 1);
+            let act_d = if rnd::nextf() < d_ratio { d } else { d + 1 };
             let progress = (time::elapsed_seconds() - start_time) / duration;
             let cur_temp = start_temp.powf(1. - progress) * end_temp.powf(progress);
             let threshold = -cur_temp * rnd::nextf().ln();

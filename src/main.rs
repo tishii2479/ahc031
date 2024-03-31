@@ -168,7 +168,7 @@ fn optimize_initial_r(ws: &Vec<i64>, input: &Input) -> (Vec<Vec<Vec<usize>>>, i6
 fn optimize_start_cands(
     input: &Input,
     time_limit: f64,
-) -> Vec<(i64, Vec<i64>, Vec<Vec<Vec<usize>>>)> {
+) -> Vec<(i64, i64, Vec<i64>, Vec<Vec<Vec<usize>>>)> {
     let mut start_cands = vec![];
     let mut base_bin_count = input.N / 5;
 
@@ -217,14 +217,14 @@ fn optimize_start_cands(
             continue;
         }
 
-        // eprintln!("score: {} {:?}", score, ws);
-        start_cands.push((score, ws, r));
-
         let max_height = *heights
             .iter()
             .map(|v| v.iter().max().unwrap())
             .max()
             .unwrap();
+
+        // eprintln!("score: {} {:?}", score, ws);
+        start_cands.push((score, max_height, ws, r));
 
         if max_height <= input.W {
             base_bin_count = base_bin_count.max(bin_count);
@@ -246,11 +246,13 @@ pub fn load_params() -> Param {
         Param {
             start_temp: args[1].parse::<f64>().unwrap(),
             end_temp: args[2].parse::<f64>().unwrap(),
+            d_ratio: args[3].parse::<f64>().unwrap(),
         }
     } else {
         Param {
-            start_temp: 1e1,
-            end_temp: 1e-1,
+            start_temp: 10.,
+            end_temp: 0.7,
+            d_ratio: 0.45,
         }
     }
 }
@@ -262,11 +264,12 @@ fn main() {
     let param = load_params();
     let start_cands = optimize_start_cands(&input, FIRST_TIME_LIMIT);
     let start_count = 1;
+
     eprintln!("start-count: {}", start_count);
 
     let mut answers = vec![];
     for i in 0..start_count {
-        let (_, ws, r) = start_cands[i].clone();
+        let (_, _, ws, r) = start_cands[i].clone();
         eprintln!("ws({}): {:?}", ws.len(), ws);
 
         let mut solver = Solver::new(ws, r, &input);
