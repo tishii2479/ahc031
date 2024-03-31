@@ -188,8 +188,8 @@ fn to_squeezed_height(
     if over_height > 0 {
         let mut space_for_r_idx = (0..heights.len())
             .map(|i| {
-                let d = input.A[d][r_idx[i]] % w;
-                (if d == 0 { w } else { d }, i)
+                let over_s = input.A[d][r_idx[i]] % w;
+                (if over_s == 0 { w } else { over_s }, i)
             })
             .collect::<Vec<(i64, usize)>>();
         space_for_r_idx.sort();
@@ -225,7 +225,9 @@ impl<'a> Solver<'a> {
 
         for d in 0..self.input.D {
             self.state.setup_prev_h_rem(d);
-            self.optimize_r(d, time_limit);
+            if d != self.input.D - 1 {
+                self.optimize_r(d, time_limit);
+            }
 
             total_cost += self.state.to_next_d(d, self.input);
         }
@@ -241,7 +243,7 @@ impl<'a> Solver<'a> {
         let end_temp: f64 = 1e0; // :param
 
         let start_time = time::elapsed_seconds();
-        let duration = ((time_limit - start_time) / (self.input.D - d) as f64).max(1e-3);
+        let duration = ((time_limit - start_time) / (self.input.D - d - 1) as f64).max(1e-3);
         let end_time = start_time + duration;
 
         let mut iteration = 0;
@@ -262,15 +264,17 @@ impl<'a> Solver<'a> {
             let threshold = -cur_temp * rnd::nextf().ln();
             let p = rnd::nextf();
 
+            let act_d = d + (rnd::next() & 1); // TODO: d+1をたくさんやった方が良さそう
+
             if p < action_ratio[0] {
                 // 列内シャッフル
                 let col = rnd::gen_index(self.state.ws.len());
-                if self.state.r[d][col].len() == 1 {
+                if self.state.r[act_d][col].len() == 1 {
                     continue;
                 }
-                let mut new_r = self.state.r[d][col].clone();
+                let mut new_r = self.state.r[act_d][col].clone();
                 rnd::shuffle(&mut new_r);
-                std::mem::swap(&mut self.state.r[d][col], &mut new_r);
+                std::mem::swap(&mut self.state.r[act_d][col], &mut new_r);
 
                 let new_score_col = self.state.eval_col(d, col, self.input, false);
                 let score_diff = self.state.get_score_col_diff(col, new_score_col);
@@ -279,21 +283,20 @@ impl<'a> Solver<'a> {
                     self.state.score += score_diff;
                     adapt_in_shuf += 1;
                 } else {
-                    std::mem::swap(&mut self.state.r[d][col], &mut new_r);
+                    std::mem::swap(&mut self.state.r[act_d][col], &mut new_r);
                 }
             } else if p < action_ratio[1] {
                 // 列内n回swap
-                // TODO: 隣接swap
                 let col = rnd::gen_index(self.state.ws.len());
-                if self.state.r[d][col].len() == 1 {
+                if self.state.r[act_d][col].len() == 1 {
                     continue;
                 }
-                let swap_count = rnd::gen_range(1, self.state.r[d][col].len().clamp(1, 2) + 1);
+                let swap_count = rnd::gen_range(1, self.state.r[act_d][col].len().clamp(1, 2) + 1);
                 let swaps = (0..swap_count)
                     .map(|_| {
                         (
-                            rnd::gen_index(self.state.r[d][col].len()),
-                            rnd::gen_index(self.state.r[d][col].len()),
+                            rnd::gen_index(self.state.r[act_d][col].len()),
+                            rnd::gen_index(self.state.r[act_d][col].len()),
                         )
                     })
                     .filter(|(i, j)| i != j)
@@ -303,7 +306,7 @@ impl<'a> Solver<'a> {
                 }
 
                 for &(i, j) in swaps.iter() {
-                    self.state.r[d][col].swap(i, j);
+                    self.state.r[act_d][col].swap(i, j);
                 }
                 let new_score_col = self.state.eval_col(d, col, self.input, false);
                 let score_diff = self.state.get_score_col_diff(col, new_score_col);
@@ -313,23 +316,23 @@ impl<'a> Solver<'a> {
                     adapt_in_swap += 1;
                 } else {
                     for &(i, j) in swaps.iter().rev() {
-                        self.state.r[d][col].swap(i, j);
+                        self.state.r[act_d][col].swap(i, j);
                     }
                 }
             } else if p < action_ratio[2] {
                 // 列間1個移動
                 let col1 = rnd::gen_index(self.state.ws.len());
-                if self.state.r[d][col1].len() <= 1 {
+                if self.state.r[act_d][col1].len() <= 1 {
                     continue;
                 }
                 let col2 = rnd::gen_index(self.state.ws.len());
                 if col1 == col2 {
                     continue;
                 }
-                let i1 = rnd::gen_index(self.state.r[d][col1].len());
-                let r1 = self.state.r[d][col1].remove(i1);
-                let i2 = rnd::gen_index(self.state.r[d][col2].len() + 1);
-                self.state.r[d][col2].insert(i2, r1);
+                let i1 = rnd::gen_index(self.state.r[act_d][col1].len());
+                let r1 = self.state.r[act_d][col1].remove(i1);
+                let i2 = rnd::gen_index(self.state.r[act_d][col2].len() + 1);
+                self.state.r[act_d][col2].insert(i2, r1);
                 let new_score_col1 = self.state.eval_col(d, col1, self.input, false);
                 let new_score_col2 = self.state.eval_col(d, col2, self.input, false);
                 let score_diff = self.state.get_score_col_diff(col1, new_score_col1)
@@ -341,8 +344,8 @@ impl<'a> Solver<'a> {
                     self.state.score += score_diff;
                     adapt_tr_move += 1;
                 } else {
-                    self.state.r[d][col2].remove(i2);
-                    self.state.r[d][col1].insert(i1, r1);
+                    self.state.r[act_d][col2].remove(i2);
+                    self.state.r[act_d][col1].insert(i1, r1);
                 }
             } else {
                 // 列間n:nスワップ
@@ -352,8 +355,8 @@ impl<'a> Solver<'a> {
                 if col1 == col2 {
                     continue;
                 }
-                let i1 = rnd::gen_index(self.state.r[d][col1].len());
-                let i2 = rnd::gen_index(self.state.r[d][col2].len());
+                let i1 = rnd::gen_index(self.state.r[act_d][col1].len());
+                let i2 = rnd::gen_index(self.state.r[act_d][col2].len());
                 let mut cnt1 = 0;
                 let mut cnt2 = 0;
                 let mut h1 = 0;
@@ -361,25 +364,25 @@ impl<'a> Solver<'a> {
 
                 // 低い方に足す
                 for _ in 0..move_count {
-                    if h1 <= h2 && i1 + cnt1 < self.state.r[d][col1].len() {
-                        h1 += self.input.A[d][self.state.r[d][col1][i1 + cnt1]];
+                    if h1 <= h2 && i1 + cnt1 < self.state.r[act_d][col1].len() {
+                        h1 += self.input.A[act_d][self.state.r[act_d][col1][i1 + cnt1]];
                         cnt1 += 1;
-                    } else if h2 <= h1 && i2 + cnt2 < self.state.r[d][col2].len() {
-                        h2 += self.input.A[d][self.state.r[d][col2][i2 + cnt2]];
+                    } else if h2 <= h1 && i2 + cnt2 < self.state.r[act_d][col2].len() {
+                        h2 += self.input.A[act_d][self.state.r[act_d][col2][i2 + cnt2]];
                         cnt2 += 1;
                     }
                 }
                 let rs1 = (0..cnt1)
-                    .map(|_| self.state.r[d][col1].remove(i1))
+                    .map(|_| self.state.r[act_d][col1].remove(i1))
                     .collect::<Vec<usize>>();
                 let rs2 = (0..cnt2)
-                    .map(|_| self.state.r[d][col2].remove(i2))
+                    .map(|_| self.state.r[act_d][col2].remove(i2))
                     .collect::<Vec<usize>>();
                 for &r1 in rs1.iter().rev() {
-                    self.state.r[d][col2].insert(i2, r1);
+                    self.state.r[act_d][col2].insert(i2, r1);
                 }
                 for &r2 in rs2.iter().rev() {
-                    self.state.r[d][col1].insert(i1, r2);
+                    self.state.r[act_d][col1].insert(i1, r2);
                 }
                 let new_score_col1 = self.state.eval_col(d, col1, self.input, false);
                 let new_score_col2 = self.state.eval_col(d, col2, self.input, false);
@@ -393,28 +396,30 @@ impl<'a> Solver<'a> {
                     adapt_tr_swap += 1;
                 } else {
                     for _ in 0..cnt2 {
-                        self.state.r[d][col1].remove(i1);
+                        self.state.r[act_d][col1].remove(i1);
                     }
                     for _ in 0..cnt1 {
-                        self.state.r[d][col2].remove(i2);
+                        self.state.r[act_d][col2].remove(i2);
                     }
                     for &r1 in rs1.iter().rev() {
-                        self.state.r[d][col1].insert(i1, r1);
+                        self.state.r[act_d][col1].insert(i1, r1);
                     }
                     for &r2 in rs2.iter().rev() {
-                        self.state.r[d][col2].insert(i2, r2);
+                        self.state.r[act_d][col2].insert(i2, r2);
                     }
                 }
             }
             iteration += 1;
         }
 
+        eprintln!("score:       {:6}", self.state.score);
         eprintln!("duration:    {:.6}", duration);
         eprintln!("iteration:   {}", iteration);
         eprintln!("in-shuf:     {}", adapt_in_shuf);
         eprintln!("in-swap:     {}", adapt_in_swap);
         eprintln!("tr-move:     {}", adapt_tr_move);
         eprintln!("tr-swap:     {}", adapt_tr_swap);
+        eprintln!("score:       {:?}", self.state.score_col);
     }
 
     fn create_answer(&mut self, total_cost: i64) -> Answer {
@@ -497,18 +502,83 @@ impl State {
         if !allow_overflow && heights.iter().sum::<i64>() > input.W {
             return (0, 1 << 40);
         }
-        let (next_h, exceed_cost) =
+        let (next_h, exceed_cost1) =
             to_squeezed_height(heights, &self.r[d][col], d, self.ws[col], input);
-        let match_count = match_greedy_fast(
-            &self.prev_h[col],
-            &self.prev_rem[col],
-            &next_h,
-            input.W,
-            &mut self.shared_v,
-        );
-        let switch_count = self.prev_h.len() + next_h.len() - match_count * 2;
+        let (match_count1, groups1, prev_pickup_rem1) =
+            match_greedy(&self.prev_h[col], &self.prev_rem[col], &next_h, input.W);
+        let switch_count1 = self.prev_h[col].len() + next_h.len() - match_count1 * 2;
 
-        (switch_count as i64 * self.ws[col], exceed_cost)
+        let mut next_prev_rem = vec![vec![]; next_h.len()]; // TODO: 使い回す
+        for &(_, (l, r), rem) in groups1.iter() {
+            // assert!(
+            //     r - 1 < next_prev_rem.len(),
+            //     "{:?} {:?} {:?}",
+            //     &groups1,
+            //     &self.prev_h,
+            //     next_h
+            // );
+            next_prev_rem[l].push((r - 1, rem));
+        }
+        next_prev_rem[0].push((next_h.len() - 1, *prev_pickup_rem1.last().unwrap()));
+
+        let r_idx = &self.r[d + 1][col];
+        let heights = r_idx
+            .iter()
+            .map(|&r_idx| ceil_div(input.A[d + 1][r_idx], self.ws[col]))
+            .collect::<Vec<i64>>(); // TODO: 使い回す
+        if !allow_overflow && heights.iter().sum::<i64>() > input.W {
+            return (0, 1 << 40);
+        }
+        let (next_next_h, exceed_cost2) =
+            to_squeezed_height(heights, &self.r[d + 1][col], d + 1, self.ws[col], input);
+        // assert_eq!(
+        //     next_h.iter().sum::<i64>()
+        //         + next_prev_rem
+        //             .iter()
+        //             .map(|v| v.iter().map(|x| x.1).sum::<i64>())
+        //             .sum::<i64>(),
+        //     input.W
+        // );
+        let (match_count2, groups2, prev_pickup_rem2) =
+            match_greedy(&next_h, &next_prev_rem, &next_next_h, input.W);
+        // assert_eq!(
+        //     prev_pickup_rem2.iter().sum::<i64>()
+        //         + next_next_h.iter().sum::<i64>()
+        //         + groups2.iter().map(|g| g.2).sum::<i64>(),
+        //     input.W,
+        //     "{:?} {:?} {:?} {:?} {:?} {:?} {:?}",
+        //     &groups1,
+        //     &groups2,
+        //     &prev_pickup_rem1,
+        //     &prev_pickup_rem2,
+        //     &self.prev_h[col],
+        //     next_h,
+        //     next_next_h,
+        // );
+        let switch_count2 = next_h.len() + next_next_h.len() - match_count2 * 2;
+
+        // eprintln!(
+        //     "d: {}, col: {}, m1: {}, m2: {}, sw1: {}, sw2: {}, ec1: {}, ec2: {}, g1: {:?}, g2: {:?}, pr1: {:?}, pr2: {:?}, ph: {:?}, nh1: {:?}, nnh2: {:?},",
+        //     d,
+        //     col,
+        //     match_count1,
+        //     match_count2,
+        //     switch_count1,
+        //     switch_count2,
+        //     exceed_cost1,
+        //     exceed_cost2,
+        //     &groups1,
+        //     &groups2,
+        //     &prev_pickup_rem1,
+        //     &prev_pickup_rem2,
+        //     &self.prev_h[col],
+        //     next_h,
+        //     next_next_h,
+        // );
+        (
+            (switch_count1 + switch_count2) as i64 * self.ws[col],
+            exceed_cost1 + exceed_cost2,
+        )
     }
 
     fn get_score_col_diff(&self, col: usize, new_score_col: (i64, i64)) -> i64 {

@@ -20,10 +20,11 @@ if __name__ == "__main__":
     subprocess.run(f"pbcopy < tools/out/{file}.txt", shell=True)
 
     # 過去ログとの比較
-    # import pandas as pd
-    # df = pd.read_csv("./log/database.csv")
-    # print(
-    #     df[(df.input_file == f"tools/in/{file}.txt")][
-    #         ["solver_version", "score", "invest_level"]
-    #     ].sort_values(by="score", ascending=False)[:20]
-    # )
+    import pandas as pd
+
+    df = pd.read_csv("./log/database.csv")
+    print(
+        df[(df.input_file == f"tools/in/{file}.txt")][
+            ["solver_version", "score"]
+        ].sort_values(by="score")[:20]
+    )
