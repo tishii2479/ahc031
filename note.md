@@ -468,6 +468,10 @@ for d in 1..input.D {
 - 評価関数
     - 余裕の確保はやはりしておきたい
     - まとめられるのはまとめるとか
+- `State`に色々持たせる
+    - `height`
+    - `r_pos: Vec<(usize, usize)>,`
+    - `fn set_r(&mut self, d: usize, col: usize, r_idx: usize)`
 - パラメータ調整
     - 余り上がらなそうだが、5%くらいは伸びてほしい
 

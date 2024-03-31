@@ -233,12 +233,9 @@ impl<'a> Solver<'a> {
         self.create_answer(total_cost)
     }
 
-    /// TODO: d=0は余裕だけを評価する
+    /// d日目とd+1日目を同時に最適化する
     fn optimize_r(&mut self, d: usize, time_limit: f64) {
-        let mut cur_score_col: Vec<(i64, i64)> = (0..self.state.ws.len())
-            .map(|col| self.state.eval_col(d, col, self.input, true))
-            .collect();
-        let mut _cur_score = cur_score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
+        self.state.setup_score(d, self.input);
 
         let start_temp: f64 = 1e3; // :param
         let end_temp: f64 = 1e0; // :param
@@ -275,14 +272,11 @@ impl<'a> Solver<'a> {
                 rnd::shuffle(&mut new_r);
                 std::mem::swap(&mut self.state.r[d][col], &mut new_r);
 
-                let new_score_col =
-                    self.state
-                        .eval_col(d, col, self.input, cur_score_col[col].1 > 0);
-                let score_diff =
-                    new_score_col.0 + new_score_col.1 - cur_score_col[col].0 - cur_score_col[col].1;
+                let new_score_col = self.state.eval_col(d, col, self.input, false);
+                let score_diff = self.state.get_score_col_diff(col, new_score_col);
                 if (score_diff as f64) <= threshold {
-                    cur_score_col[col] = new_score_col;
-                    _cur_score += score_diff;
+                    self.state.score_col[col] = new_score_col;
+                    self.state.score += score_diff;
                     adapt_in_shuf += 1;
                 } else {
                     std::mem::swap(&mut self.state.r[d][col], &mut new_r);
@@ -311,14 +305,11 @@ impl<'a> Solver<'a> {
                 for &(i, j) in swaps.iter() {
                     self.state.r[d][col].swap(i, j);
                 }
-                let new_score_col =
-                    self.state
-                        .eval_col(d, col, self.input, cur_score_col[col].1 > 0);
-                let score_diff =
-                    new_score_col.0 + new_score_col.1 - cur_score_col[col].0 - cur_score_col[col].1;
+                let new_score_col = self.state.eval_col(d, col, self.input, false);
+                let score_diff = self.state.get_score_col_diff(col, new_score_col);
                 if (score_diff as f64) <= threshold {
-                    cur_score_col[col] = new_score_col;
-                    _cur_score += score_diff;
+                    self.state.score_col[col] = new_score_col;
+                    self.state.score += score_diff;
                     adapt_in_swap += 1;
                 } else {
                     for &(i, j) in swaps.iter().rev() {
@@ -339,23 +330,15 @@ impl<'a> Solver<'a> {
                 let r1 = self.state.r[d][col1].remove(i1);
                 let i2 = rnd::gen_index(self.state.r[d][col2].len() + 1);
                 self.state.r[d][col2].insert(i2, r1);
-                let new_score_col1 =
-                    self.state
-                        .eval_col(d, col1, self.input, cur_score_col[col1].1 > 0);
-                let new_score_col2 =
-                    self.state
-                        .eval_col(d, col2, self.input, cur_score_col[col2].1 > 0);
-                let score_diff =
-                    new_score_col1.0 + new_score_col1.1 + new_score_col2.0 + new_score_col2.1
-                        - cur_score_col[col1].0
-                        - cur_score_col[col1].1
-                        - cur_score_col[col2].0
-                        - cur_score_col[col2].1;
+                let new_score_col1 = self.state.eval_col(d, col1, self.input, false);
+                let new_score_col2 = self.state.eval_col(d, col2, self.input, false);
+                let score_diff = self.state.get_score_col_diff(col1, new_score_col1)
+                    + self.state.get_score_col_diff(col2, new_score_col2);
 
                 if (score_diff as f64) <= threshold {
-                    cur_score_col[col1] = new_score_col1;
-                    cur_score_col[col2] = new_score_col2;
-                    _cur_score += score_diff;
+                    self.state.score_col[col1] = new_score_col1;
+                    self.state.score_col[col2] = new_score_col2;
+                    self.state.score += score_diff;
                     adapt_tr_move += 1;
                 } else {
                     self.state.r[d][col2].remove(i2);
@@ -398,23 +381,15 @@ impl<'a> Solver<'a> {
                 for &r2 in rs2.iter().rev() {
                     self.state.r[d][col1].insert(i1, r2);
                 }
-                let new_score_col1 =
-                    self.state
-                        .eval_col(d, col1, self.input, cur_score_col[col1].1 > 0);
-                let new_score_col2 =
-                    self.state
-                        .eval_col(d, col2, self.input, cur_score_col[col2].1 > 0);
-                let score_diff =
-                    new_score_col1.0 + new_score_col1.1 + new_score_col2.0 + new_score_col2.1
-                        - cur_score_col[col1].0
-                        - cur_score_col[col1].1
-                        - cur_score_col[col2].0
-                        - cur_score_col[col2].1;
+                let new_score_col1 = self.state.eval_col(d, col1, self.input, false);
+                let new_score_col2 = self.state.eval_col(d, col2, self.input, false);
+                let score_diff = self.state.get_score_col_diff(col1, new_score_col1)
+                    + self.state.get_score_col_diff(col2, new_score_col2);
 
                 if (score_diff as f64) <= threshold {
-                    cur_score_col[col1] = new_score_col1;
-                    cur_score_col[col2] = new_score_col2;
-                    _cur_score += score_diff;
+                    self.state.score_col[col1] = new_score_col1;
+                    self.state.score_col[col2] = new_score_col2;
+                    self.state.score += score_diff;
                     adapt_tr_swap += 1;
                 } else {
                     for _ in 0..cnt2 {
@@ -467,6 +442,8 @@ impl<'a> Solver<'a> {
 }
 
 struct State {
+    score: i64,
+    score_col: Vec<(i64, i64)>,
     ws: Vec<i64>,
     // r[d][col][i]
     r: Vec<Vec<Vec<usize>>>,
@@ -483,6 +460,8 @@ impl State {
         const MAX_N: usize = 50;
         let col_count = ws.len();
         let mut state = State {
+            score: 0,
+            score_col: vec![(0, 0); ws.len()],
             ws,
             r,
             prev_h: vec![],
@@ -502,16 +481,19 @@ impl State {
         d: usize,
         col: usize,
         input: &Input,
-        allow_overflow: bool,
+        force_allow_overflow: bool,
     ) -> (i64, i64) {
         // TODO: タイブレーク時には、余裕の残り具合も足す
         // TODO: 幅も考慮する
         // NOTE: 切り替え回数が変わらないなら、遷移した方が良い（スコアの差分はない方が良いのか？）
+
+        // 現状超過していたら超過を許す
+        let allow_overflow = force_allow_overflow || self.score_col[col].1 > 0;
         let r_idx = &self.r[d][col];
         let heights = r_idx
             .iter()
             .map(|&r_idx| ceil_div(input.A[d][r_idx], self.ws[col]))
-            .collect::<Vec<i64>>();
+            .collect::<Vec<i64>>(); // TODO: 使い回す
         if !allow_overflow && heights.iter().sum::<i64>() > input.W {
             return (0, 1 << 40);
         }
@@ -527,6 +509,17 @@ impl State {
         let switch_count = self.prev_h.len() + next_h.len() - match_count * 2;
 
         (switch_count as i64 * self.ws[col], exceed_cost)
+    }
+
+    fn get_score_col_diff(&self, col: usize, new_score_col: (i64, i64)) -> i64 {
+        new_score_col.0 + new_score_col.1 - self.score_col[col].0 - self.score_col[col].1
+    }
+
+    fn setup_score(&mut self, d: usize, input: &Input) {
+        self.score_col = (0..self.ws.len())
+            .map(|col| self.eval_col(d, col, input, true))
+            .collect();
+        self.score = self.score_col.iter().map(|x| x.0 + x.1).sum::<i64>();
     }
 
     fn setup_prev_h_rem(&mut self, d: usize) {
