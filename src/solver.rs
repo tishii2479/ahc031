@@ -10,10 +10,10 @@ fn match_greedy(
     prev_rem: &Vec<Vec<(usize, i64)>>,
     next_h: &Vec<i64>,
     w: i64,
+    prev_pickup_rems: &mut Vec<i64>,
     groups: &mut Vec<((usize, usize), (usize, usize), i64)>,
-) -> (usize, Vec<i64>) {
+) -> usize {
     let mut match_count = 0;
-    let mut prev_pickup_rems = vec![0; prev_h.len()];
 
     let mut prev_rem_sum = 0;
     let mut next_rem_sum = w - next_h.iter().sum::<i64>();
@@ -26,6 +26,10 @@ fn match_greedy(
     let mut next_r = 0;
 
     groups.clear();
+    prev_pickup_rems.clear();
+    for _ in 0..prev_h.len() {
+        prev_pickup_rems.push(0);
+    }
 
     while prev_r < prev_h.len() || next_r < next_h.len() {
         if (prev_r < prev_h.len() && prev_height <= next_height) || next_r == next_h.len() {
@@ -87,7 +91,7 @@ fn match_greedy(
         }
     }
 
-    (match_count, prev_pickup_rems)
+    match_count
 }
 
 /// match_greedyで、vec![]を消したバージョン
@@ -104,8 +108,8 @@ fn match_greedy_fast(
         return 1;
     }
     let mut match_count = 0;
-    for i in 0..prev_h.len() {
-        prev_pickup_rems[i] = 0;
+    for _ in 0..prev_h.len() {
+        prev_pickup_rems.push(0);
     }
 
     let mut prev_rem_sum = 0;
@@ -639,11 +643,12 @@ impl State {
         } else {
             &self.squeezed_heights[d + 1][col]
         };
-        let (match_count1, prev_pickup_rem1) = match_greedy(
+        let match_count1 = match_greedy(
             &self.prev_h[col],
             &self.prev_rem[col],
             &next_h,
             input.W,
+            &mut self.shared.v,
             &mut self.shared.groups,
         );
         let switch_count1 = self.prev_h[col].len() + self.heights[d][col].len() - match_count1 * 2;
@@ -656,7 +661,7 @@ impl State {
         }
         self.shared.prev_rem[0].push((
             self.heights[d][col].len() - 1,
-            *prev_pickup_rem1.last().unwrap(),
+            *self.shared.v.last().unwrap(),
         ));
         let match_count2 = match_greedy_fast(
             &next_h,
@@ -754,11 +759,13 @@ impl State {
                 &self.squeezed_heights[d][col]
             };
             let mut groups = vec![];
-            let (match_count, _) = match_greedy(
+            let mut prev_pickup_rem = vec![];
+            let match_count = match_greedy(
                 &self.prev_h[col],
                 &self.prev_rem[col],
                 &heights,
                 input.W,
+                &mut prev_pickup_rem,
                 &mut groups,
             );
             let switch_count = if d == 0 {
@@ -1068,18 +1075,32 @@ fn test_match_greedy() {
         let prev_h = vec![40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 60)]);
         let next_h = vec![80];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![80];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20)]);
         let next_h = vec![40];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
     }
@@ -1089,27 +1110,48 @@ fn test_match_greedy() {
         let prev_h = vec![40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 60)]);
         let next_h = vec![20, 30];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![60];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 40)]);
         let next_h = vec![20, 30];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![60];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 40)]);
         let next_h = vec![60, 20];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
     }
@@ -1119,45 +1161,80 @@ fn test_match_greedy() {
         let prev_h = vec![20, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 40)]);
         let next_h = vec![10];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 40)]);
         let next_h = vec![80];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 40)]);
         let next_h = vec![30];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(1, 1, 40)]);
         let next_h = vec![30];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 40)]);
         let next_h = vec![30];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
     }
@@ -1167,81 +1244,144 @@ fn test_match_greedy() {
         let prev_h = vec![20, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (1, 1, 30)]);
         let next_h = vec![20, 30];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 2);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
         let next_h = vec![20, 30];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 2);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
         let next_h = vec![20, 40];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         dbg!(&match_count, &groups, &prev_pickup_rem);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
         let next_h = vec![20, 20];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 2);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
         let next_h = vec![30, 20];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 2);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
         let next_h = vec![50, 20];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 2);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (0, 1, 30)]);
         let next_h = vec![80, 10];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (1, 1, 30)]);
         let next_h = vec![80, 10];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![60, 30];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 10)]);
         let next_h = vec![60, 10];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 2);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
     }
@@ -1251,27 +1391,48 @@ fn test_match_greedy() {
         let prev_h = vec![10, 10, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 20), (0, 2, 20)]);
         let next_h = vec![10];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![10, 10, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 20), (2, 2, 20)]);
         let next_h = vec![10];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![20, 30, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 2, 10)]);
         let next_h = vec![10];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 1);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
     }
@@ -1281,18 +1442,32 @@ fn test_match_greedy() {
         let prev_h = vec![10, 10, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 0, 20), (1, 2, 20)]);
         let next_h = vec![50, 40];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 2);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
         let prev_h = vec![10, 10, 40];
         let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 1, 20), (0, 2, 20)]);
         let next_h = vec![50, 40];
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, prev_pickup_rem) =
-            match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         assert_eq!(match_count, 2);
         assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
     }
@@ -1301,8 +1476,16 @@ fn test_match_greedy() {
     let prev_h = vec![20, 30, 40];
     let prev_rem = create_rem_mat(prev_h.len(), vec![(0, 2, 10)]);
     let next_h = vec![20, 30, 40];
+    let mut prev_pickup_rem = vec![];
     let mut groups = vec![];
-    let (match_count, prev_pickup_rem) = match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+    let match_count = match_greedy(
+        &prev_h,
+        &prev_rem,
+        &next_h,
+        W,
+        &mut prev_pickup_rem,
+        &mut groups,
+    );
     assert_eq!(match_count, 3);
     assert_match_result(&prev_h, &next_h, &groups, &prev_pickup_rem, W);
 
@@ -1331,8 +1514,16 @@ fn test_stackgraph() {
         let prev_h: Vec<i64> = prev_nodes.iter().map(|&i| graph.nodes[i].height).collect();
         let prev_rem = graph.gen_rem(&prev_nodes);
         let next_h = h;
+        let mut prev_pickup_rem = vec![];
         let mut groups = vec![];
-        let (match_count, _) = match_greedy(&prev_h, &prev_rem, &next_h, W, &mut groups);
+        let match_count = match_greedy(
+            &prev_h,
+            &prev_rem,
+            &next_h,
+            W,
+            &mut prev_pickup_rem,
+            &mut groups,
+        );
         let switch_count = prev_h.len() + next_h.len() - match_count * 2;
         score += switch_count as i64 * w;
         // graph.return_rem(&mut prev_pickup_rem); // 不要？
