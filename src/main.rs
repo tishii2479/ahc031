@@ -247,12 +247,14 @@ pub fn load_params() -> Param {
             start_temp: args[1].parse::<f64>().unwrap(),
             end_temp: args[2].parse::<f64>().unwrap(),
             d_ratio: args[3].parse::<f64>().unwrap(),
+            start_count_div: args[4].parse::<f64>().unwrap(),
         }
     } else {
         Param {
             start_temp: 10.,
             end_temp: 0.7,
             d_ratio: 0.45,
+            start_count_div: 30.415,
         }
     }
 }
@@ -263,7 +265,7 @@ fn main() {
     let input = Input::read_input();
     let param = load_params();
     let start_cands = optimize_start_cands(&input, FIRST_TIME_LIMIT);
-    let start_count = get_start_count(&input);
+    let start_count = get_start_count(&input, &param).min(start_cands.len());
 
     eprintln!("start-count: {}", start_count);
 
@@ -283,8 +285,8 @@ fn main() {
     best_ans.output();
 }
 
-fn get_start_count(input: &Input) -> usize {
-    let v = input.N * input.D / 25;
+fn get_start_count(input: &Input, param: &Param) -> usize {
+    let v = ((input.N * input.D) as f64 / param.start_count_div).round() as usize;
     if v <= 5 {
         10
     } else {

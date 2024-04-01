@@ -448,13 +448,13 @@ impl<'a> Solver<'a> {
             iteration += 1;
         }
 
-        // eprintln!("score:       {:6}", self.state.score);
-        // eprintln!("duration:    {:.6}", duration);
-        // eprintln!("iteration:   {}", iteration);
-        // eprintln!("in-swap:     {}", adapt_in_swap);
-        // eprintln!("tr-move:     {}", adapt_tr_move);
-        // eprintln!("tr-swap:     {}", adapt_tr_swap);
-        // eprintln!("score:       {:?}", self.state.score_col);
+        eprintln!("score:       {:6}", self.state.score);
+        eprintln!("duration:    {:.6}", duration);
+        eprintln!("iteration:   {}", iteration);
+        eprintln!("in-swap:     {}", adapt_in_swap);
+        eprintln!("tr-move:     {}", adapt_tr_move);
+        eprintln!("tr-swap:     {}", adapt_tr_swap);
+        eprintln!("score:       {:?}", self.state.score_col);
     }
 
     fn create_answer(&mut self, total_cost: i64) -> Answer {
