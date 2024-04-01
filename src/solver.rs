@@ -265,13 +265,10 @@ impl<'a> Solver<'a> {
         let end_time = start_time + duration;
 
         let mut iteration = 0;
-        let mut adapt_in_swap = 0;
-        let mut adapt_tr_move = 0;
-        let mut adapt_tr_swap = 0;
 
         let start_temp = param.start_temp;
         let end_temp = param.end_temp;
-        let mut action_ratio = vec![0.1, 0.4, 0.5]; // TODO: act_dごとに変える
+        let mut action_ratio = vec![0.05, 0.05, 0.90];
         for i in 0..action_ratio.len() - 1 {
             action_ratio[i + 1] += action_ratio[i];
         }
@@ -295,7 +292,8 @@ impl<'a> Solver<'a> {
                 if self.state.r[act_d][col].len() == 1 {
                     continue;
                 }
-                let swap_count = rnd::gen_range(1, self.state.r[act_d][col].len().clamp(1, 2) + 1);
+                let swap_count =
+                    rnd::gen_range(1, (self.state.r[act_d][col].len() - 1).clamp(1, 3) + 1);
                 swaps.clear();
                 for _ in 0..swap_count {
                     let (i, j) = (
@@ -319,7 +317,6 @@ impl<'a> Solver<'a> {
                 if (score_diff as f64) <= threshold {
                     self.state.score_col[col] = new_score_col;
                     self.state.score += score_diff;
-                    adapt_in_swap += 1;
                 } else {
                     for &(i, j) in swaps.iter().rev() {
                         self.state.swap_r(act_d, col, i, j);
@@ -364,13 +361,12 @@ impl<'a> Solver<'a> {
                     self.state.score_col[col1] = new_score_col1;
                     self.state.score_col[col2] = new_score_col2;
                     self.state.score += score_diff;
-                    adapt_tr_move += 1;
                 } else {
                     self.state.move_r(act_d, (col2, i2), (col1, i1), self.input);
                 }
             } else {
                 // 列間n:nスワップ
-                let move_count = rnd::gen_range(2, 6); // :param
+                let move_count = rnd::gen_range(2, 8); // :param
                 let col1 = rnd::gen_index(self.state.ws.len());
                 let col2 = rnd::gen_index(self.state.ws.len());
                 if col1 == col2 {
@@ -443,10 +439,6 @@ impl<'a> Solver<'a> {
                     self.state.score_col[col1] = new_score_col1;
                     self.state.score_col[col2] = new_score_col2;
                     self.state.score += score_diff;
-                    if score_diff < 0 {
-                        // dbg!(iteration, score_diff, col1, col2, &rs1, &rs2);
-                    }
-                    adapt_tr_swap += 1;
                 } else {
                     for _ in 0..cnt2 {
                         self.state.remove_r(act_d, col1, i1);
@@ -468,10 +460,6 @@ impl<'a> Solver<'a> {
         eprintln!("score:       {:6}", self.state.score);
         eprintln!("duration:    {:.6}", duration);
         eprintln!("iteration:   {}", iteration);
-        eprintln!("in-swap:     {}", adapt_in_swap);
-        eprintln!("tr-move:     {}", adapt_tr_move);
-        eprintln!("tr-swap:     {}", adapt_tr_swap);
-        eprintln!("score:       {:?}", self.state.score_col);
     }
 
     fn create_answer(&mut self, total_cost: i64) -> Answer {
@@ -687,7 +675,6 @@ impl State {
         let switch_count2 =
             self.heights[d][col].len() + self.heights[d + 1][col].len() - match_count2 * 2;
 
-        // TODO: 調整
         let (w1, w2) = if d == 0 {
             (0, 2)
         } else if d == input.D - 2 {
