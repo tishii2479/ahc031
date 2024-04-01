@@ -287,9 +287,5 @@ fn main() {
 
 fn get_start_count(input: &Input, param: &Param) -> usize {
     let v = ((input.N * input.D) as f64 / param.start_count_div).round() as usize;
-    if v <= 5 {
-        10
-    } else {
-        15 - v.min(14)
-    }
+    (15 - v.min(14)).clamp(1, 10)
 }
