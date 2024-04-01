@@ -77,3 +77,16 @@ pub mod time {
 pub fn ceil_div(a: i64, b: i64) -> i64 {
     (a + b - 1) / b
 }
+
+/// aに最も近い要素のインデックスを返す
+#[inline]
+pub fn closest_index(a: usize, v: &Vec<usize>) -> usize {
+    let mut i = 0;
+    let n = v.len();
+    for j in 0..n {
+        if v[j].abs_diff(a) < v[i].abs_diff(a) {
+            i = j;
+        }
+    }
+    i
+}

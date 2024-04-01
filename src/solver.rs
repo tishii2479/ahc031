@@ -335,7 +335,11 @@ impl<'a> Solver<'a> {
                 if col1 == col2 {
                     continue;
                 }
-                let i1 = rnd::gen_index(self.state.r[act_d][col1].len());
+                let i1 = if p < action_ratio[0] + action_ratio[1] / 4. {
+                    rnd::gen_index(self.state.r[act_d][col1].len())
+                } else {
+                    closest_index(0, &self.state.r[act_d][col1])
+                };
                 let i2 = rnd::gen_index(self.state.r[act_d][col2].len() + 1);
 
                 let current_height_sum = self.state.height_sum[act_d][col2];
@@ -343,7 +347,10 @@ impl<'a> Solver<'a> {
                 let new_height_sum = self.state.height_sum[act_d][col2];
 
                 // 高さが超過していて、さらに超過するなら棄却する
-                if current_height_sum > self.input.W && new_height_sum > current_height_sum {
+                // 高さが超過していなくて、超過するなら棄却する
+                if (current_height_sum > self.input.W && new_height_sum > current_height_sum)
+                    || (current_height_sum <= self.input.W && current_height_sum > self.input.W)
+                {
                     self.state.move_r(act_d, (col2, i2), (col1, i1), self.input);
                     continue;
                 }
@@ -373,16 +380,16 @@ impl<'a> Solver<'a> {
                 let i2 = rnd::gen_index(self.state.r[act_d][col2].len());
                 let mut cnt1 = 0;
                 let mut cnt2 = 0;
-                let mut h1 = 0;
-                let mut h2 = 0;
+                let mut s1 = 0;
+                let mut s2 = 0;
 
                 // 低い方に足す
                 for _ in 0..move_count {
-                    if h1 <= h2 && i1 + cnt1 < self.state.r[act_d][col1].len() {
-                        h1 += self.input.A[act_d][self.state.r[act_d][col1][i1 + cnt1]];
+                    if s1 <= s2 && i1 + cnt1 < self.state.r[act_d][col1].len() {
+                        s1 += self.input.A[act_d][self.state.r[act_d][col1][i1 + cnt1]];
                         cnt1 += 1;
-                    } else if h2 <= h1 && i2 + cnt2 < self.state.r[act_d][col2].len() {
-                        h2 += self.input.A[act_d][self.state.r[act_d][col2][i2 + cnt2]];
+                    } else if s2 <= s1 && i2 + cnt2 < self.state.r[act_d][col2].len() {
+                        s2 += self.input.A[act_d][self.state.r[act_d][col2][i2 + cnt2]];
                         cnt2 += 1;
                     }
                 }
@@ -407,8 +414,11 @@ impl<'a> Solver<'a> {
                 let new_height_sum2 = self.state.height_sum[act_d][col2];
 
                 // 高さが超過していて、さらに超過するなら棄却する
+                // 高さが超過していなくて、超過するなら棄却する
                 if (current_height_sum1 > self.input.W && new_height_sum1 > current_height_sum1)
                     || (current_height_sum2 > self.input.W && new_height_sum2 > current_height_sum2)
+                    || (current_height_sum1 <= self.input.W && new_height_sum1 > self.input.W)
+                    || (current_height_sum2 <= self.input.W && new_height_sum2 > self.input.W)
                 {
                     for _ in 0..cnt2 {
                         self.state.remove_r(act_d, col1, i1);
@@ -433,6 +443,9 @@ impl<'a> Solver<'a> {
                     self.state.score_col[col1] = new_score_col1;
                     self.state.score_col[col2] = new_score_col2;
                     self.state.score += score_diff;
+                    if score_diff < 0 {
+                        // dbg!(iteration, score_diff, col1, col2, &rs1, &rs2);
+                    }
                     adapt_tr_swap += 1;
                 } else {
                     for _ in 0..cnt2 {
